@@ -6,7 +6,8 @@ import { analyzeInstallments } from '../finance.js';
 import { cardLabel, parseQuickEntry, parseReceiptText, toISO } from '../parser.js';
 import { analyzePurchase } from '../receipt.js';
 import { openReader } from './reader.js';
-import { openFileImport } from './arquivo.js';
+import { openFileImport, reviewMovements } from './arquivo.js';
+import { finishMovement } from '../importers.js';
 import { dateBR, html, icon, money, moneyInput, openSheet, pct, readMoney, toast } from '../ui.js';
 
 const INSTALLMENT_METHODS = ['credito', 'pix_parcelado', 'boleto'];
@@ -333,11 +334,12 @@ const tidy = (s) =>
     .replace(/(^|\s)\S/g, (c) => c.toUpperCase());
 
 /** Folha para enviar um print (ou colar o texto) de uma compra. `file`/`text` vêm do compartilhamento do celular. */
-export function openPrintSheet({ file, text } = {}) {
+export function openPrintSheet({ file, files, text } = {}) {
   openReader({
-    title: 'Ler print da compra',
-    dropTitle: 'Escolher print da compra',
+    title: 'Ler prints de compras',
+    dropTitle: 'Escolher prints',
     dropText: 'Comprovante Pix, nota fiscal, recibo ou tela da compra.',
+    initialFiles: files,
     textLabel: 'Texto do comprovante',
     textPlaceholder: 'Ex.: Você enviou um Pix de R$ 50,00 para Maria Souza',
     initialFile: file,
@@ -358,7 +360,21 @@ export function openPrintSheet({ file, text } = {}) {
       sheet.close();
       openTxForm({ prefill: prefillFromExtract(data), extracted: data, engine });
     },
+    // vários prints: um lançamento por print, numa lista para conferir e salvar de uma vez
+    onMany(results, sheet) {
+      const movements = results.map(({ data }) => purchaseMovement(data)).filter((m) => m.amount > 0);
+      if (!movements.length) return sheet.status('Não achei valores nesses prints.', 'error');
+      reviewMovements({ label: `${results.length} prints · ${results[0].engine?.label || ''}`, movements }, sheet);
+    },
   });
+}
+
+/** Compra lida de um print -> linha da lista de conferência (parcelada: o valor da 1ª parcela). */
+function purchaseMovement(d) {
+  const n = d.installments > 1 ? d.installments : 1;
+  const value = n > 1 ? d.installmentValue || (d.amount || 0) / n : d.amount || 0;
+  const m = finishMovement({ date: d.date || toISO(new Date()), time: d.time || '', description: d.description || d.merchant || 'Compra', signed: d.type === 'income' ? value : -value, type: d.type || 'expense' });
+  return { ...m, amount: Math.round(m.amount * 100) / 100, category: d.category || m.category, method: d.method || (n > 1 ? 'credito' : null), card: d.card && (d.card.last4 || d.card.brand || d.card.bank) ? cardLabel(d.card) : '', installment: n > 1 ? { i: 1, n } : m.installment };
 }
 
 /** Registro rápido: interpreta o texto e salva na hora. */

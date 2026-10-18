@@ -95,13 +95,42 @@ async function readPdfImages(file, maxPages = 8) {
 const ext = (f) => (f.name.split('.').pop() || '').toLowerCase();
 
 /** Lê os arquivos escolhidos e devolve um resultado para revisão. */
+/**
+ * Lê um ou vários arquivos. Prints viram páginas de um extrato/fatura; cada documento é lido à parte.
+ * Com mais de um, os lançamentos são juntados numa lista só para conferir.
+ */
 async function readFiles(files, mode, onStatus) {
   const images = files.filter((f) => f.type.startsWith('image/'));
+  const docs = files.filter((f) => !f.type.startsWith('image/'));
+  const parts = [];
+  const failed = [];
   if (images.length) {
     const r = await analyzeStatementImages(images, { invoice: mode === 'fatura', onStatus });
-    return { label: `${images.length} print${images.length > 1 ? 's' : ''} · ${r.engine?.label || ''}`, ...r };
+    parts.push({ label: `${images.length} print${images.length > 1 ? 's' : ''} · ${r.engine?.label || ''}`, ...r });
   }
-  const f = files[0];
+  for (let k = 0; k < docs.length; k++) {
+    const status = docs.length > 1 ? (m) => onStatus(`Arquivo ${k + 1} de ${docs.length}: ${m}`) : onStatus;
+    try {
+      parts.push(await readFile(docs[k], mode, status));
+    } catch (e) {
+      if (files.length === 1) throw e;
+      failed.push(docs[k].name);
+    }
+  }
+  if (!parts.length) throw new Error(`Não consegui ler ${failed.join(', ')}.`);
+  if (parts.length === 1 && !failed.length) return parts[0];
+  if (parts.some((p) => p.backup)) throw new Error('O backup do Meu Bolso precisa ser importado sozinho.');
+  return {
+    label: `${files.length} arquivos${failed.length ? ` · não li: ${failed.join(', ')}` : ''}`,
+    movements: parts.flatMap((p) => p.movements),
+    card: parts.find((p) => p.card)?.card || null,
+    isInvoice: parts.some((p) => p.isInvoice),
+    // vencimento/total só valem quando vieram de uma fatura só
+    ...(parts.length === 1 ? { dueDate: parts[0].dueDate, total: parts[0].total } : {}),
+  };
+}
+
+async function readFile(f, mode, onStatus) {
   const e = ext(f);
   onStatus(`Lendo ${f.name}…`);
   if (e === 'ofx' || e === 'qfx') {
@@ -205,8 +234,8 @@ export function openFileImport({ mode = 'extrato', files = null } = {}) {
     <label class="drop" id="f-drop">
       <input type="file" id="f-files" multiple accept="${ACCEPT}" class="sr-only">
       ${icon('upload', 'lg')}
-      <b>Escolher arquivo</b>
-      <span id="f-hint">${mode === 'fatura' ? 'PDF ou DOCX da fatura, prints das páginas, CSV ou OFX do cartão.' : 'CSV, TXT, OFX, Excel, JSON, PDF, DOCX ou HTML de extrato. Prints também funcionam.'}</span>
+      <b>Escolher arquivos</b>
+      <span id="f-hint">${mode === 'fatura' ? 'PDF ou DOCX da fatura, prints das páginas, CSV ou OFX do cartão. Pode escolher vários de uma vez.' : 'CSV, TXT, OFX, Excel, JSON, PDF, DOCX ou HTML de extrato. Prints também funcionam. Pode escolher vários de uma vez.'}</span>
     </label>
     <div id="f-status" class="status" hidden></div>
     <details class="more"><summary>Onde exportar nos apps</summary>
@@ -276,7 +305,7 @@ export function openFileImport({ mode = 'extrato', files = null } = {}) {
       });
       sheet.body.querySelectorAll('[name=imp-mode]').forEach((r) =>
         r.addEventListener('change', () => {
-          $('#f-hint').textContent = modeNow() === 'fatura' ? 'PDF ou DOCX da fatura, prints das páginas, CSV ou OFX do cartão.' : 'CSV, TXT, OFX, Excel, JSON, PDF, DOCX ou HTML de extrato. Prints também funcionam.';
+          $('#f-hint').textContent = modeNow() === 'fatura' ? 'PDF ou DOCX da fatura, prints das páginas, CSV ou OFX do cartão. Pode escolher vários de uma vez.' : 'CSV, TXT, OFX, Excel, JSON, PDF, DOCX ou HTML de extrato. Prints também funcionam. Pode escolher vários de uma vez.';
         }),
       );
       $('#f-read').addEventListener('click', () => {
@@ -362,6 +391,12 @@ function renderBackup(backup, sheet) {
     sheet.close();
     toast('Backup restaurado');
   };
+}
+
+/** Lista de conferência dentro de outra folha (ex.: vários prints de compras). */
+export function reviewMovements(r, sheet, mode = 'extrato') {
+  if (!sheet.body.querySelector('#f-review')) sheet.body.querySelector('#r-results').innerHTML = '<div id="f-review"></div>';
+  renderReview(r, sheet, mode);
 }
 
 function renderReview(r, sheet, mode) {

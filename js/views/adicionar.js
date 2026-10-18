@@ -7,8 +7,8 @@ import { openPrintSheet, openTxForm } from './form.js';
 const OPTIONS = [
   ['expense', 'minus', 'Gasto', 'Preencher à mão: valor, categoria, parcelas, cartão'],
   ['income', 'plus', 'Ganho', 'Salário, freela, Pix recebido'],
-  ['print', 'camera', 'Ler print', 'Compra, comprovante Pix ou nota fiscal'],
-  ['file', 'upload', 'Documento ou fatura', 'PDF, DOCX, TXT, CSV, OFX, Excel ou prints de várias páginas'],
+  ['print', 'camera', 'Ler prints', 'Uma ou várias compras, comprovantes Pix ou notas'],
+  ['file', 'upload', 'Documento ou fatura', 'Vários de uma vez: PDF, DOCX, TXT, CSV, OFX, Excel ou prints'],
   ['text', 'copy', 'Colar texto', 'Extrato, fatura ou anotações'],
   ['loan', 'calc', 'Contrato de empréstimo', 'Ver o custo e o impacto antes de contratar'],
 ];

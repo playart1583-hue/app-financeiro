@@ -154,8 +154,8 @@ async function handleIncoming() {
 function routeShared({ text, files }) {
   const images = files.filter((f) => f.type.startsWith('image/'));
   const docs = files.filter((f) => !f.type.startsWith('image/'));
-  // um print vai para a leitura de compra; vários prints, PDF, CSV, OFX e planilhas para a importação de arquivos
-  if (docs.length) openFileImport({ files: docs, mode: /fatura|invoice/i.test(docs[0].name) ? 'fatura' : 'extrato' });
+  // um print vai para a leitura de compra; vários prints, PDF, CSV, OFX e planilhas (juntos) para a importação de arquivos
+  if (docs.length) openFileImport({ files, mode: /fatura|invoice/i.test(docs[0].name) ? 'fatura' : 'extrato' });
   else if (images.length > 1) openFileImport({ files: images });
   else if (images.length) openPrintSheet({ file: images[0] });
   else if (text) openTextImport({ text });

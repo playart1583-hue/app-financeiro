@@ -401,10 +401,12 @@ function openSerasaImport() {
     title: 'Importar dívidas do Serasa',
     intro: html`O Serasa não libera conexão direta com apps pessoais. Abra o app ou site do Serasa, vá em <b>Limpa Nome</b> (ou "Minhas dívidas"), tire um print da lista e envie aqui. Também dá para copiar e colar o texto.`,
     dropTitle: 'Enviar print do Serasa',
-    dropText: 'Pode enviar um print de cada vez.',
+    dropText: 'Um print por tela da lista de dívidas.',
     textLabel: 'Texto copiado do Serasa',
     textPlaceholder: 'Banco X\nDívida de R$ 2.345,67\nPague R$ 480,00 à vista',
     analyze: (file, o) => analyzeSerasa(file, o).then((r) => r.debts),
+    // vários prints da lista: junta tudo, sem repetir a mesma dívida que aparece em dois prints
+    merge: (lists) => [...new Map(lists.flat().map((d) => [`${d.creditor}|${d.balance}`, d])).values()],
     parseText: (t) => parseSerasaText(t),
     onResult(debts, sheet) {
       const box = sheet.body.querySelector('#r-results');

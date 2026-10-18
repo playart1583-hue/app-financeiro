@@ -22,6 +22,14 @@ export function openLoanContract({ file, text } = {}) {
     initialFile: file,
     initialText: text,
     analyze: analyzeLoanContract,
+    // várias páginas do mesmo contrato: cada campo vem da primeira página que o mostra
+    merge: (pages) => ({
+      data: pages.reduce((acc, p) => {
+        for (const [k, v] of Object.entries(p.data || {})) if (acc[k] == null && v != null) acc[k] = v;
+        return acc;
+      }, {}),
+      engine: pages[0].engine,
+    }),
     parseText: (t) => {
       const data = parseLoanText(t);
       return data.n || data.pmt || data.released || data.financed ? { data, engine: { label: 'texto colado' } } : { error: 'Não encontrei valores de empréstimo nesse texto (valor, parcelas, taxa).' };

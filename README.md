@@ -32,6 +32,7 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 | **Colar texto**: linhas de extrato, texto de fatura ou anotações ("almoço 32,90 débito", uma por linha) viram lançamentos para conferir | + → *Colar texto* |
 | **Transferências entre suas contas** (ex.: Santander → Mercado Pago): escolha *↔ Entre contas* no lançamento; aparece no extrato e não conta como gasto nem ganho. O app lembra o seu nome e marca a outra ponta (mesmo valor, até 30 min) | Extrato · Ajustes → *Seu nome completo* |
 | **Navegação no Android**: o botão voltar do celular fecha a janela aberta e volta para a tela anterior do app; no Início ele não sai (use o botão de início ou o de apps recentes). a engrenagem de Ajustes fica no canto de cima de todas as telas | Todas as telas |
+| **Vários de uma vez**: escolha vários prints de compras (cada um vira um lançamento, numa lista para conferir), vários arquivos de extrato/fatura (CSV, OFX, PDF, DOCX, planilhas e prints juntos), várias telas do Serasa ou várias páginas do contrato. O Compartilhar do celular também aceita seleções com vários arquivos | + → *Ler prints* · *Documento ou fatura* |
 | **Bloqueio por digital** (app Android): pede digital, rosto ou senha do celular ao abrir e ao voltar depois de 30 s | Ajustes → *Bloqueio por digital* |
 
 ## App Android (APK)
