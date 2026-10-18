@@ -38,7 +38,7 @@ O app também é empacotado como APK com o [Capacitor](https://capacitorjs.com).
 - **Registro automático das notificações** do Mercado Pago, 99, 99Pay, Nubank, Inter, Itaú, Bradesco, Santander, Caixa, BB, PicPay, C6, PagBank e carteiras digitais (só as que têm valor em R$). É preciso liberar em *Ajustes → Registro automático das notificações*. Em Android 13+ com APK instalado fora da Play Store, antes é preciso permitir "configurações restritas" nas informações do app.
 - **Compartilhar → Meu Bolso** para prints, textos, PDF de fatura, CSV, OFX e planilhas.
 
-Instalar: copie o `meu-bolso.apk` para o celular, abra e permita "instalar apps desconhecidos" para o app que você usou para abrir o arquivo.
+Instalar: baixe o APK mais recente em **Releases** (ou `dist/`) no celular, abra e permita "instalar apps desconhecidos" para o app que você usou para abrir o arquivo.
 
 Gerar de novo:
 
@@ -50,7 +50,7 @@ npm run android:apk        # precisa de JDK 21 e Android SDK (ANDROID_HOME)
 
 Ou pelo GitHub: *Actions → APK Android → Run workflow* (também roda a cada push). O APK é publicado em **Releases**, pronto para baixar no celular, e fica também em *Artifacts* da execução. Em repositório privado, o GitHub Actions precisa estar liberado na conta (Settings → Billing and plans).
 
-A chave de assinatura está em `android/keystore/` (o repositório é privado). Todas as versões precisam ser assinadas com ela para atualizar por cima sem perder os dados; se o repositório ficar público, gere uma chave nova e guarde-a fora do Git. Ao lançar uma versão nova, aumente `versionCode` em `android/app/build.gradle`.
+A chave de assinatura fica **criptografada** em `android/keystore/meubolso.jks.enc`. O GitHub Actions a abre com o secret `ANDROID_KEYSTORE_PASSWORD` (Settings → Secrets and variables → Actions); sem esse secret o build para com aviso. Para gerar no computador, abra a chave com `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in android/keystore/meubolso.jks.enc -out android/keystore/meubolso.jks` e exporte `ANDROID_KEYSTORE_PASSWORD`. Guarde a senha: sem ela não dá para lançar atualizações que instalem por cima. Ao lançar uma versão nova, aumente `versionCode` em `android/app/build.gradle`.
 
 ## Como rodar
 

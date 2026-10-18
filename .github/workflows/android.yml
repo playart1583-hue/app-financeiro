@@ -27,8 +27,19 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run android:sync
+      - name: Abrir a chave de assinatura
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Falta o secret ANDROID_KEYSTORE_PASSWORD (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in android/keystore/meubolso.jks.enc -out android/keystore/meubolso.jks -pass env:ANDROID_KEYSTORE_PASSWORD
       - run: ./gradlew assembleRelease --no-daemon
         working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       - name: Nome do arquivo com a versão
         id: apk
         run: |
@@ -40,6 +51,8 @@ jobs:
         with:
           name: meu-bolso-apk
           path: ${{ steps.apk.outputs.file }}
+      - name: Conferir assinatura
+        run: $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner verify --print-certs "${{ steps.apk.outputs.file }}"
       - name: Publicar em Releases
         uses: softprops/action-gh-release@v2
         with:
