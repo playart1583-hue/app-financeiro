@@ -151,6 +151,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && sheets.length) sheets[sheets.length - 1].close();
 });
 export const closeAllSheets = () => [...sheets].forEach((s) => s.close());
+/** Fecha só a folha de cima (botão voltar do Android). Retorna se havia alguma aberta. */
+export const closeTopSheet = () => (sheets.length ? (sheets[sheets.length - 1].close(), true) : false);
 
 // ---------- Dicas flutuantes dos gráficos ----------
 let tipEl = null;

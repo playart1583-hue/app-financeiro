@@ -31,6 +31,7 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 | **Botão +** com todas as entradas: preencher à mão, ler print, documento ou fatura, colar texto, contrato de empréstimo | Barra inferior |
 | **Colar texto**: linhas de extrato, texto de fatura ou anotações ("almoço 32,90 débito", uma por linha) viram lançamentos para conferir | + → *Colar texto* |
 | **Transferências entre suas contas** (ex.: Santander → Mercado Pago): escolha *↔ Entre contas* no lançamento; aparece no extrato e não conta como gasto nem ganho. O app lembra o seu nome e marca a outra ponta (mesmo valor, até 30 min) | Extrato · Ajustes → *Seu nome completo* |
+| **Navegação no Android**: o botão voltar do celular fecha a janela aberta e volta para a tela anterior do app; no Início ele não sai (use o botão de início ou o de apps recentes). Ajustes fica fixo na barra de baixo | Barra inferior |
 | **Bloqueio por digital** (app Android): pede digital, rosto ou senha do celular ao abrir e ao voltar depois de 30 s | Ajustes → *Bloqueio por digital* |
 
 ## App Android (APK)

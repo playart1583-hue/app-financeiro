@@ -1,7 +1,7 @@
 // Inicialização, navegação entre telas e barra inferior.
 import { keyOf, addMonths } from './analytics.js';
 import { cloud, getState, init, subscribe } from './store.js';
-import { closeAllSheets, html, icon } from './ui.js';
+import { closeAllSheets, closeTopSheet, html, icon } from './ui.js';
 import { openPrintSheet } from './views/form.js';
 import { openAddMenu } from './views/adicionar.js';
 import { openFileImport, openTextImport } from './views/arquivo.js';
@@ -25,10 +25,13 @@ const TABS = [
   null,
   ['relatorios', 'chart', 'Relatórios'],
   ['planejar', 'target', 'Planejar'],
+  ['ajustes', 'gear', 'Ajustes'],
 ];
-const TAB_OF = { dicas: 'planejar', cofrinhos: 'planejar', dividas: 'planejar', pix: 'planejar', orcamentos: 'planejar', ajustes: 'planejar' };
+const TAB_OF = { dicas: 'planejar', cofrinhos: 'planejar', dividas: 'planejar', pix: 'planejar', orcamentos: 'planejar' };
 
 const ui = { route: 'inicio', month: keyOf(new Date()), filter: 'all', query: '' };
+// telas abertas dentro do app desde que ele abriu: o voltar do Android percorre só estas
+let depth = 0;
 const viewEl = document.getElementById('view');
 const navEl = document.getElementById('tabbar');
 
@@ -44,7 +47,8 @@ export function go(route, opts = {}) {
   ui.route = route;
   if (opts.filter) ui.filter = opts.filter;
   try {
-    if (location.hash.slice(1) !== route) history.pushState(null, '', `#${route}`);
+    if (opts.replace) history.replaceState(null, '', `#${route}`);
+    else if (location.hash.slice(1) !== route) history.pushState(null, '', `#${route}`), depth++;
   } catch {
     /* alguns ambientes bloqueiam history */
   }
@@ -100,6 +104,7 @@ document.addEventListener('click', (e) => {
 });
 
 window.addEventListener('popstate', () => {
+  depth = Math.max(0, depth - 1);
   ui.route = routeFromHash();
   closeAllSheets();
   render();
@@ -156,6 +161,17 @@ function routeShared({ text, files }) {
   else openPrintSheet();
 }
 handleIncoming();
+
+// Botão voltar do Android (chamado pelo MainActivity): fecha a folha aberta, volta para a tela anterior do app
+// e, no Início, fica no app. Para sair, use o botão de início ou o de apps recentes do celular.
+window.meuBolsoVoltar = () => {
+  if (document.querySelector('.lock')) return 'bloqueado';
+  if (closeTopSheet()) return 'folha';
+  if (depth > 0) return history.back(), 'voltou';
+  if (ui.route !== 'inicio') return go(VIEWS[ui.route].back || 'inicio', { replace: true }), 'subiu';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  return 'inicio';
+};
 
 // App Android: o menu Compartilhar chega pela ponte nativa
 startNative({ onShared: routeShared });

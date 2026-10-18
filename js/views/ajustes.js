@@ -31,7 +31,6 @@ async function saveFile(name, text) {
 export default {
   id: 'ajustes',
   title: 'Ajustes',
-  back: 'planejar',
   render({ state }) {
     const st = state.settings;
     const key = getApiKey();
