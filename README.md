@@ -48,7 +48,7 @@ npm run android:apk        # precisa de JDK 21 e Android SDK (ANDROID_HOME)
 # saída: android/app/build/outputs/apk/release/app-release.apk
 ```
 
-Ou pelo GitHub: *Actions → APK Android → Run workflow*; o APK fica em *Artifacts*.
+Ou pelo GitHub: *Actions → APK Android → Run workflow* (também roda a cada push). O APK é publicado em **Releases**, pronto para baixar no celular, e fica também em *Artifacts* da execução. Em repositório privado, o GitHub Actions precisa estar liberado na conta (Settings → Billing and plans).
 
 A chave de assinatura está em `android/keystore/` (o repositório é privado). Todas as versões precisam ser assinadas com ela para atualizar por cima sem perder os dados; se o repositório ficar público, gere uma chave nova e guarde-a fora do Git. Ao lançar uma versão nova, aumente `versionCode` em `android/app/build.gradle`.
 

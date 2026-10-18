@@ -1,11 +1,15 @@
-# Gera o APK do Meu Bolso a cada push nesta branch (ou manualmente em Actions > "APK Android" > Run workflow).
-# O arquivo fica em Actions > execução > Artifacts > meu-bolso-apk.
+# Gera o APK do Meu Bolso no GitHub.
+# - A cada push nas branches abaixo, ou manualmente em Actions > "APK Android" > Run workflow.
+# - O APK aparece em Releases (pronto para baixar no celular) e também em Artifacts da execução.
 name: APK Android
 
 on:
   push:
     branches: [main, ccr-2b28733f-3fo937]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   apk:
@@ -25,7 +29,24 @@ jobs:
       - run: npm run android:sync
       - run: ./gradlew assembleRelease --no-daemon
         working-directory: android
+      - name: Nome do arquivo com a versão
+        id: apk
+        run: |
+          VERSION=$(grep -oP 'versionName "\K[^"]+' android/app/build.gradle)
+          cp android/app/build/outputs/apk/release/app-release.apk "meu-bolso-$VERSION.apk"
+          echo "file=meu-bolso-$VERSION.apk" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: meu-bolso-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: ${{ steps.apk.outputs.file }}
+      - name: Publicar em Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-v${{ steps.apk.outputs.version }}-${{ github.run_number }}
+          name: Meu Bolso ${{ steps.apk.outputs.version }} (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          files: ${{ steps.apk.outputs.file }}
+          body: |
+            APK gerado automaticamente a partir de ${{ github.ref_name }} (${{ github.sha }}).
+            No celular: baixe o arquivo .apk abaixo, abra e permita instalar apps desta fonte.
