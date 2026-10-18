@@ -1,7 +1,7 @@
 // Formulário de lançamento (gasto/ganho), leitura de print e registro rápido por texto.
 import { addTransaction, deleteTransaction, findDuplicate, getState, restoreTransactions, updateTransaction } from '../store.js';
 import { markOwnTransfer } from '../transfers.js';
-import { cardInfo, cardText, knownLast4, nextDue, rememberCard, splitCard } from '../cards.js';
+import { cardInfo, cardText, cycleText, dueFor, knownLast4, rememberCard, splitCard } from '../cards.js';
 import { CLASSIFICATIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, categorize, defaultClassification, getCategory } from '../categories.js';
 import { analyzeInstallments } from '../finance.js';
 import { cardLabel, parseQuickEntry, parseReceiptText, toISO } from '../parser.js';
@@ -118,7 +118,7 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           <label class="field"><span>Parcelas</span><input id="f-inst" type="number" name="installments" min="1" max="72" inputmode="numeric" value="${v.installments || 1}"></label>
           <label class="field" id="f-pmt-wrap"><span>Valor da parcela</span><input id="f-pmt" name="installmentValue" inputmode="decimal" placeholder="sem juros" value="${moneyInput(v.installmentValue)}"></label>
         </div>
-        <label class="field" id="f-due-wrap"><span>Vencimento da 1ª parcela</span><input id="f-due" type="date" name="firstDue" value="${v.firstDue || ''}"><small class="hint">As próximas parcelas entram nos meses seguintes, no mesmo dia.</small></label>
+        <label class="field" id="f-due-wrap"><span>Vencimento da 1ª parcela</span><input id="f-due" type="date" name="firstDue" value="${v.firstDue || ''}"><small class="hint"><span id="f-cycle"></span>As próximas parcelas entram nos meses seguintes, no mesmo dia.</small></label>
         <div id="f-juros" class="juros" hidden></div>
         <label class="check" id="f-rec-wrap"><input type="checkbox" id="f-rec" name="recurring"> <span>Repetir todo mês (conta fixa, salário)</span></label>`
       : ''}
@@ -171,7 +171,8 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
         const due = $('#f-due');
         if (!due || dueTouched) return;
         const info = cardInfo(val('last4'));
-        due.value = info?.dueDay ? nextDue(val('date'), info.dueDay) : '';
+        $('#f-cycle').textContent = cycleText(info) ? `Cartão ${val('last4')}: ${cycleText(info)}. ` : '';
+        due.value = dueFor(val('date'), info);
       };
       f.querySelector('#f-due')?.addEventListener('input', () => (dueTouched = true));
       f.querySelector('#f-last4').addEventListener('input', (e) => {

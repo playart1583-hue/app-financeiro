@@ -16,3 +16,16 @@ test('próximo vencimento da fatura depois da compra', () => {
   assert.equal(nextDue('2026-10-15', 20), '2026-11-20');
   assert.equal(nextDue('2026-01-25', 31), '2026-02-28');
 });
+
+test('com o fechamento: antes fica na fatura aberta, no dia ou depois vai para a próxima', () => {
+  // fecha dia 3, vence dia 10
+  assert.equal(nextDue('2026-10-02', 10, 3), '2026-10-10');
+  assert.equal(nextDue('2026-10-03', 10, 3), '2026-11-10');
+  assert.equal(nextDue('2026-10-18', 10, 3), '2026-11-10');
+  // fecha dia 28, vence dia 5 do mês seguinte
+  assert.equal(nextDue('2026-10-27', 5, 28), '2026-11-05');
+  assert.equal(nextDue('2026-10-28', 5, 28), '2026-12-05');
+  // fecha 31 em mês curto: último dia
+  assert.equal(nextDue('2026-02-27', 8, 31), '2026-03-08');
+  assert.equal(nextDue('2026-02-28', 8, 31), '2026-04-08');
+});

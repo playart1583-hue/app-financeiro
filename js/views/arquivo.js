@@ -6,7 +6,7 @@ import { analyzeStatementImages, canStructureText, structureText } from '../rece
 import { readDocx, readHtml, readOdt, readRtf } from '../documents.js';
 import { addTransactions, deleteTransactions, findDuplicate, mergeBackup, replaceState } from '../store.js';
 import { dateBR, esc, html, icon, money, openSheet, toast } from '../ui.js';
-import { cardInfo, cardText, knownLast4, nextDue, rememberCard } from '../cards.js';
+import { cardInfo, cardText, dueFor, knownLast4, rememberCard } from '../cards.js';
 
 const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
@@ -443,11 +443,17 @@ function renderReview(r, sheet, mode) {
         <label class="field"><span>Forma de pagamento</span><select name="o-method">${Object.entries(PAYMENT_METHODS).map(([k, l]) => html`<option value="${k}" ${k === (isInvoice || hasInst ? 'credito' : 'pix') ? 'selected' : ''}>${l}</option>`)}</select></label>
         ${hasInst
           ? isInvoice
-            ? html`<label class="field"><span>Vencimento da fatura</span><input name="o-due" type="date" value="${r.dueDate || (cardInfo(defLast4)?.dueDay ? nextDue(ms.filter((m) => m.installment).map((m) => m.date).sort().pop(), cardInfo(defLast4).dueDay) : '')}"></label>`
-            : html`<label class="field"><span>Dia do vencimento</span><input name="o-dueday" type="number" min="1" max="31" inputmode="numeric" value="${cardInfo(defLast4)?.dueDay || ''}" placeholder="Ex.: 10"></label>`
+            ? html`<label class="field"><span>Vencimento da fatura</span><input name="o-due" type="date" value="${r.dueDate || dueFor(ms.filter((m) => m.installment).map((m) => m.date).sort().pop(), cardInfo(defLast4))}"></label>`
+            : ''
           : ''}
       </div>
-      ${hasInst ? html`<label class="check"><input type="checkbox" name="o-future" checked> <span>Lançar as próximas parcelas nos meses seguintes${isInvoice ? ', no dia do vencimento' : ', no vencimento do cartão'} (entram nas projeções)</span></label>` : ''}
+      ${hasInst && !isInvoice
+        ? html`<div class="row2">
+            <label class="field"><span>Fatura fecha dia</span><input name="o-closeday" type="number" min="1" max="31" inputmode="numeric" value="${cardInfo(defLast4)?.closeDay || ''}" placeholder="Ex.: 3"></label>
+            <label class="field"><span>Vence dia</span><input name="o-dueday" type="number" min="1" max="31" inputmode="numeric" value="${cardInfo(defLast4)?.dueDay || ''}" placeholder="Ex.: 10"></label>
+          </div>`
+        : ''}
+      ${hasInst ? html`<label class="check"><input type="checkbox" name="o-future" checked> <span>Lançar as próximas parcelas nos meses seguintes${isInvoice ? ', no dia do vencimento' : ', conforme o fechamento e o vencimento do cartão'} (entram nas projeções)</span></label>` : ''}
       <p class="hint" id="rv-sum"></p>
       <div class="rv-list">${shown.map(
         (m, i) => html`<div class="rv-row ${skip[i] ? 'off' : ''}">
@@ -500,7 +506,8 @@ function renderReview(r, sheet, mode) {
       if (!info) return;
       if (info.bank && !f.elements['o-bank'].value) f.elements['o-bank'].value = info.bank;
       if (info.dueDay && f.elements['o-dueday'] && !f.elements['o-dueday'].value) f.elements['o-dueday'].value = info.dueDay;
-      if (info.dueDay && f.elements['o-due'] && !f.elements['o-due'].value) f.elements['o-due'].value = nextDue(ms.filter((m) => m.installment).map((m) => m.date).sort().pop(), info.dueDay);
+      if (info.closeDay && f.elements['o-closeday'] && !f.elements['o-closeday'].value) f.elements['o-closeday'].value = info.closeDay;
+      if (info.dueDay && f.elements['o-due'] && !f.elements['o-due'].value) f.elements['o-due'].value = dueFor(ms.filter((m) => m.installment).map((m) => m.date).sort().pop(), info);
     });
     updateSum();
     f.addEventListener('submit', (e) => {
@@ -511,13 +518,15 @@ function renderReview(r, sheet, mode) {
       const method = f.querySelector('[name=o-method]').value;
       const invoiceDue = f.elements['o-due']?.value || '';
       const dueDay = +f.elements['o-dueday']?.value || 0;
-      rememberCard(last4, { bank, due: invoiceDue, dueDay });
+      const closeDay = +f.elements['o-closeday']?.value || 0;
+      rememberCard(last4, { bank, due: invoiceDue, dueDay, closeDay });
       // vencimento de cada parcelada: o da fatura, ou o próximo vencimento do cartão depois da compra
       const firstDueOf = (m) => {
         if (!m.installment) return '';
         if (invoiceDue) return invoiceDue;
-        const day = (m.last4 && m.last4 !== last4 ? cardInfo(m.last4)?.dueDay : null) || dueDay || cardInfo(last4)?.dueDay;
-        return day ? nextDue(m.date, day) : '';
+        // compra de outro cartão cadastrado usa o ciclo dele; senão, o fechamento/vencimento escritos acima
+        if (m.last4 && m.last4 !== last4 && cardInfo(m.last4)?.dueDay) return dueFor(m.date, cardInfo(m.last4));
+        return dueFor(m.date, { dueDay: dueDay || cardInfo(last4)?.dueDay, closeDay: closeDay || cardInfo(last4)?.closeDay });
       };
       const picked = [...f.querySelectorAll('[name=use]:checked')].map((c) => +c.value);
       const rest = ms.map((_, k) => k).filter((k) => k >= MAX_ROWS && !skip[k]);

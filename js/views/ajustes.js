@@ -5,7 +5,7 @@ import { cloud, exportJSON, getApiKey, importJSON, loadDemo, resetAll, setApiKey
 import { html, icon, pct, toast } from '../ui.js';
 import { isNativeApp, nativeBridge } from '../native.js';
 import { confirmIdentity, lockStatus } from '../lock.js';
-import { cardList, removeCard, saveCard } from '../cards.js';
+import { cardList, cycleText, removeCard, saveCard } from '../cards.js';
 
 const SYNC = {
   local: 'Os dados ficam só neste aparelho. Faça backup de vez em quando.',
@@ -47,10 +47,10 @@ export default {
       </form></section>
 
       <section class="card" id="cartoes"><h2 class="card-title">${icon('card')} Meus cartões</h2>
-        <p class="hint">Cadastre o final e o dia de vencimento de cada cartão. Nas compras parceladas (à mão, por print ou arquivo) as parcelas já entram nos meses certos, no dia do vencimento.</p>
+        <p class="hint">Cadastre o final, o dia em que a fatura fecha e o dia em que vence. Compra feita antes do fechamento entra na fatura aberta; no dia do fechamento ou depois, a 1ª parcela vai para o vencimento seguinte. As outras parcelas seguem nos meses depois.</p>
         ${cardList().length
           ? html`<ul class="card-list">${cardList().map(
-              (c) => html`<li><span class="tile-ic">${icon('card')}</span><span class="tile-main"><b>Cartão ${c.last4}</b><small>${c.bank || 'Banco não informado'} · ${c.dueDay ? `vence dia ${c.dueDay}` : 'sem vencimento'}</small></span>
+              (c) => html`<li><span class="tile-ic">${icon('card')}</span><span class="tile-main"><b>Cartão ${c.last4}</b><small>${c.bank || 'Banco não informado'} · ${cycleText(c) || 'sem fechamento e vencimento'}</small></span>
                 <button type="button" class="icon-btn" data-card-edit="${c.last4}" aria-label="Editar cartão ${c.last4}">${icon('edit')}</button>
                 <button type="button" class="icon-btn" data-card-del="${c.last4}" aria-label="Remover cartão ${c.last4}">${icon('trash')}</button></li>`,
             )}</ul>`
@@ -59,6 +59,7 @@ export default {
           <div class="card-fields">
             <label class="field"><span>Final</span><input name="last4" inputmode="numeric" maxlength="4" placeholder="8238" required></label>
             <label class="field"><span>Banco</span><input name="bank" placeholder="Ex.: Nubank"></label>
+            <label class="field"><span>Fecha dia</span><input name="closeDay" type="number" min="1" max="31" inputmode="numeric" placeholder="3"></label>
             <label class="field"><span>Vence dia</span><input name="dueDay" type="number" min="1" max="31" inputmode="numeric" placeholder="10"></label>
           </div>
           <button type="submit" class="btn primary sm">${icon('plus')} Salvar cartão</button>
@@ -128,7 +129,7 @@ export default {
     cardf.last4.addEventListener('input', (e) => (e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4)));
     cardf.addEventListener('submit', (e) => {
       e.preventDefault();
-      if (!saveCard(cardf.last4.value, { bank: cardf.bank.value, dueDay: cardf.dueDay.value })) return toast('Informe os 4 últimos números do cartão.');
+      if (!saveCard(cardf.last4.value, { bank: cardf.bank.value, dueDay: cardf.dueDay.value, closeDay: cardf.closeDay.value })) return toast('Informe os 4 últimos números do cartão.');
       toast(`Cartão ${cardf.last4.value} salvo`);
     });
     root.querySelectorAll('[data-card-edit]').forEach((b) =>
@@ -137,6 +138,7 @@ export default {
         cardf.last4.value = c.last4;
         cardf.bank.value = c.bank || '';
         cardf.dueDay.value = c.dueDay || '';
+        cardf.closeDay.value = c.closeDay || '';
         cardf.bank.focus();
       }),
     );

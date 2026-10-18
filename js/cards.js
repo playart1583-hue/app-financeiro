@@ -29,33 +29,59 @@ export function knownLast4() {
 export const cardInfo = (last4) => (last4 ? cards()[last4] || null : null);
 
 /** Guarda banco e dia de vencimento do cartão (só o que veio preenchido). */
-export function rememberCard(last4, { bank, due, dueDay } = {}) {
+export function rememberCard(last4, { bank, due, dueDay, closeDay } = {}) {
   if (!/^\d{4}$/.test(last4 || '')) return;
   const old = cards()[last4] || {};
   const day = due ? +due.slice(8, 10) : +dueDay || null;
-  const next = { ...old, ...(bank ? { bank } : {}), ...(day >= 1 && day <= 31 ? { dueDay: day } : {}) };
+  const next = { ...old, ...(bank ? { bank } : {}), ...(day >= 1 && day <= 31 ? { dueDay: day } : {}), ...(+closeDay >= 1 && +closeDay <= 31 ? { closeDay: +closeDay } : {}) };
   if (JSON.stringify(old) !== JSON.stringify(next)) updateSettings({ cards: { ...cards(), [last4]: next } });
 }
 
+// dia `day` do mês de `iso` (dia 31 vira o último dia em meses mais curtos)
+const onDay = (iso, day) => {
+  const last = new Date(+iso.slice(0, 4), +iso.slice(5, 7), 0).getDate();
+  return `${iso.slice(0, 8)}${String(Math.min(day, last)).padStart(2, '0')}`;
+};
+const monthStart = (iso, k) => addMonthsISO(`${iso.slice(0, 7)}-01`, k);
+
 /**
- * Próximo vencimento da fatura para uma compra feita em `purchaseISO`: o dia de vencimento do cartão
- * no mês seguinte à compra que fique pelo menos 10 dias depois dela (a fatura fecha uns dias antes).
+ * Vencimento da fatura em que cai uma compra feita em `purchaseISO`.
+ * Com o dia de fechamento: compra antes do fechamento entra na fatura que está aberta; no dia do
+ * fechamento ou depois, vai para a fatura seguinte. Sem ele, usa o primeiro vencimento a pelo menos
+ * 10 dias da compra (a fatura costuma fechar uns 7 a 10 dias antes de vencer).
  */
-export function nextDue(purchaseISO, dueDay) {
+export function nextDue(purchaseISO, dueDay, closeDay = null) {
   if (!purchaseISO || !dueDay) return '';
+  if (closeDay) {
+    let close = '';
+    for (let k = 0; k < 3 && !close; k++) {
+      const c = onDay(monthStart(purchaseISO, k), closeDay);
+      if (c > purchaseISO) close = c;
+    }
+    for (let k = 0; k < 3; k++) {
+      const d = onDay(monthStart(close, k), dueDay);
+      if (d > close) return d;
+    }
+  }
   for (let k = 0; k < 3; k++) {
-    const month = addMonthsISO(`${purchaseISO.slice(0, 7)}-01`, k);
-    const last = new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate();
-    const due = `${month.slice(0, 8)}${String(Math.min(dueDay, last)).padStart(2, '0')}`;
+    const due = onDay(monthStart(purchaseISO, k), dueDay);
     if ((new Date(due) - new Date(purchaseISO)) / 86400000 >= 10) return due;
   }
   return '';
 }
 
+/** Vencimento da 1ª parcela pelo cartão cadastrado (fechamento + vencimento), ou '' se não souber. */
+export const dueFor = (purchaseISO, info) => (info?.dueDay ? nextDue(purchaseISO, info.dueDay, info.closeDay) : '');
+
+/** "fecha dia 28 · vence dia 5" */
+export const cycleText = (info) => [info?.closeDay ? `fecha dia ${info.closeDay}` : '', info?.dueDay ? `vence dia ${info.dueDay}` : ''].filter(Boolean).join(' · ');
+
 /** Cadastro em Ajustes → Meus cartões. */
-export function saveCard(last4, { bank = '', dueDay = null } = {}) {
+const day = (v) => (+v >= 1 ? Math.min(31, Math.floor(+v)) : null);
+
+export function saveCard(last4, { bank = '', dueDay = null, closeDay = null } = {}) {
   if (!/^\d{4}$/.test(last4 || '')) return false;
-  updateSettings({ cards: { ...cards(), [last4]: { bank: bank.trim(), ...(dueDay ? { dueDay: Math.min(31, Math.max(1, +dueDay)) } : {}) } } });
+  updateSettings({ cards: { ...cards(), [last4]: { bank: bank.trim(), ...(day(dueDay) ? { dueDay: day(dueDay) } : {}), ...(day(closeDay) ? { closeDay: day(closeDay) } : {}) } } });
   return true;
 }
 
