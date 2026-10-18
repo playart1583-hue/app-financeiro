@@ -1,0 +1,442 @@
+// Estado do app, persistência local (localStorage) e sincronização opcional com a conta Claude
+// quando o app roda como Artifact (capacidade `db`, pasta privada de cada pessoa).
+import { addMonthsISO, monthKey } from './analytics.js';
+import { defaultClassification } from './categories.js';
+import { toISO } from './parser.js';
+import { outstandingBalance, periodsToPayoff, pricePayment, rateFromInstallments, round2 } from './finance.js';
+import { buildDemo } from './demo.js';
+
+const LS_KEY = 'meubolso:v1';
+const LS_SECRET = 'meubolso:apikey';
+
+export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+const empty = () => ({
+  version: 1,
+  updatedAt: 0,
+  settings: { name: '', hideValues: false, theme: 'system', savingsRate: 0.008, demo: false },
+  transactions: [],
+  budgets: {},
+  goals: [],
+  loans: [],
+});
+
+let state = empty();
+const listeners = new Set();
+
+export const getState = () => state;
+export const subscribe = (fn) => (listeners.add(fn), () => listeners.delete(fn));
+
+function readLocal() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocal() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  } catch {
+    /* modo privado ou armazenamento cheio: segue só em memória */
+  }
+}
+
+function migrate(s) {
+  const base = empty();
+  return { ...base, ...s, settings: { ...base.settings, ...(s.settings || {}) } };
+}
+
+export function commit(mutator, { silent = false } = {}) {
+  mutator(state);
+  state.updatedAt = Date.now();
+  writeLocal();
+  cloud.schedule();
+  if (!silent) listeners.forEach((fn) => fn(state));
+}
+
+export function replaceState(next) {
+  state = migrate(next);
+  state.updatedAt = Date.now();
+  writeLocal();
+  cloud.schedule();
+  listeners.forEach((fn) => fn(state));
+}
+
+export function init() {
+  const local = readLocal();
+  if (local) state = migrate(local);
+  else {
+    state = migrate(buildDemo(new Date()));
+    state.settings.demo = true;
+    writeLocal();
+  }
+  cloud.connect();
+  return state;
+}
+
+// ---------- Chave da API (só neste aparelho, nunca sincroniza) ----------
+export function getApiKey() {
+  try {
+    return localStorage.getItem(LS_SECRET) || '';
+  } catch {
+    return '';
+  }
+}
+export function setApiKey(v) {
+  try {
+    if (v) localStorage.setItem(LS_SECRET, v);
+    else localStorage.removeItem(LS_SECRET);
+  } catch {
+    /* ignore */
+  }
+}
+
+// ---------- Lançamentos ----------
+
+/**
+ * Adiciona um lançamento. Se tiver parcelas, gera uma por mês; se for recorrente, gera 12 meses.
+ * draft: { type, amount, description, category, classification, date, time, method, card, merchant,
+ *          installments, installmentValue, recurring, source, location }
+ * amount = valor da compra (à vista). installmentValue (opcional) = parcela com juros.
+ */
+export function addTransaction(draft) {
+  const ids = [];
+  const n = Math.max(1, Math.floor(draft.installments || 1));
+  const base = {
+    type: draft.type,
+    description: draft.description?.trim() || '',
+    category: draft.category,
+    classification: draft.type === 'expense' ? draft.classification || defaultClassification(draft.category) : null,
+    time: draft.time || '',
+    method: draft.method || 'pix',
+    card: draft.card || '',
+    merchant: draft.merchant || '',
+    location: draft.location || '',
+    source: draft.source || 'manual',
+    createdAt: Date.now(),
+  };
+  commit((s) => {
+    if (n > 1) {
+      const groupId = uid();
+      const pmt = draft.installmentValue ? round2(draft.installmentValue) : round2(draft.amount / n);
+      const cash = round2(draft.amount);
+      for (let i = 0; i < n; i++) {
+        const id = uid();
+        ids.push(id);
+        s.transactions.push({ ...base, id, amount: pmt, date: addMonthsISO(draft.date, i), installment: { i: i + 1, n, groupId, cash } });
+      }
+    } else if (draft.recurring) {
+      const recurringId = uid();
+      for (let i = 0; i < 12; i++) {
+        const id = uid();
+        ids.push(id);
+        s.transactions.push({ ...base, id, amount: round2(draft.amount), date: addMonthsISO(draft.date, i), recurringId });
+      }
+    } else {
+      const id = uid();
+      ids.push(id);
+      s.transactions.push({ ...base, id, amount: round2(draft.amount), date: draft.date });
+    }
+  });
+  return ids;
+}
+
+export function updateTransaction(id, patch, { wholeGroup = false } = {}) {
+  commit((s) => {
+    const t = s.transactions.find((x) => x.id === id);
+    if (!t) return;
+    const groupKey = t.installment?.groupId || t.recurringId;
+    const targets = wholeGroup && groupKey ? s.transactions.filter((x) => (x.installment?.groupId || x.recurringId) === groupKey) : [t];
+    for (const x of targets) {
+      const { date, amount, ...rest } = patch;
+      Object.assign(x, rest);
+      if (x === t) {
+        if (date) x.date = date;
+        if (amount != null) x.amount = round2(amount);
+      } else if (amount != null && !x.installment) x.amount = round2(amount);
+    }
+  });
+}
+
+export function deleteTransaction(id, { wholeGroup = false, futureOnly = false } = {}) {
+  let removed = [];
+  commit((s) => {
+    const t = s.transactions.find((x) => x.id === id);
+    if (!t) return;
+    const groupKey = t.installment?.groupId || t.recurringId;
+    const del = (x) => {
+      if (x.id === id) return true;
+      if (!wholeGroup || !groupKey) return false;
+      if ((x.installment?.groupId || x.recurringId) !== groupKey) return false;
+      return futureOnly ? x.date >= t.date : true;
+    };
+    removed = s.transactions.filter(del);
+    s.transactions = s.transactions.filter((x) => !del(x));
+  });
+  return removed;
+}
+
+export function restoreTransactions(list) {
+  commit((s) => s.transactions.push(...list));
+}
+
+export function clearDemo() {
+  commit((s) => {
+    s.transactions = s.transactions.filter((t) => !t.demo);
+    s.goals = s.goals.filter((g) => !g.demo);
+    s.loans = s.loans.filter((l) => !l.demo);
+    if (Object.values(s.budgets).length && s.settings.demo) s.budgets = {};
+    s.settings.demo = false;
+  });
+}
+
+export function loadDemo() {
+  const demo = buildDemo(new Date());
+  commit((s) => {
+    s.transactions.push(...demo.transactions);
+    s.goals.push(...demo.goals);
+    s.loans.push(...demo.loans);
+    s.budgets = { ...demo.budgets, ...s.budgets };
+    s.settings.demo = true;
+  });
+}
+
+export function resetAll() {
+  replaceState({ ...empty(), settings: { ...empty().settings, name: state.settings.name } });
+}
+
+// ---------- Cofrinhos ----------
+export function addGoal({ name, emoji, target, deadline }) {
+  commit((s) => s.goals.push({ id: uid(), name, emoji: emoji || '🐷', target: +target || 0, deadline: deadline || '', history: [], createdAt: Date.now() }));
+}
+export function goalMove(id, amount, note = '') {
+  commit((s) => {
+    const g = s.goals.find((x) => x.id === id);
+    if (g) g.history.push({ date: toISO(new Date()), amount: round2(amount), note });
+  });
+}
+export function updateGoal(id, patch) {
+  commit((s) => Object.assign(s.goals.find((x) => x.id === id) || {}, patch));
+}
+export function deleteGoal(id) {
+  commit((s) => (s.goals = s.goals.filter((g) => g.id !== id)));
+}
+
+// ---------- Empréstimos e dívidas ----------
+
+/**
+ * mode 'parcelado': principal, n, firstDue e (rate OU pmt); o outro é calculado.
+ * mode 'rotativo': balance, rate, minPayment (cartão, cheque especial).
+ * mode 'acordo': dívida negativada (Serasa): balance, offer, offerInstallments, since.
+ */
+export function addLoan(input) {
+  const loan = { id: uid(), name: input.name, kind: input.kind || 'emprestimo', mode: input.mode, createdAt: Date.now(), payments: [], source: input.source || 'manual' };
+  if (input.mode === 'parcelado') {
+    loan.principal = +input.principal;
+    loan.n = Math.max(1, +input.n);
+    loan.firstDue = input.firstDue || toISO(new Date());
+    loan.paid = Math.min(loan.n, Math.max(0, +input.paid || 0));
+    if (input.pmt && !input.rate) {
+      loan.pmt = +input.pmt;
+      loan.rate = rateFromInstallments(loan.principal, loan.pmt, loan.n);
+    } else {
+      loan.rate = +input.rate || 0;
+      loan.pmt = round2(pricePayment(loan.principal, loan.rate, loan.n));
+    }
+  } else if (input.mode === 'rotativo') {
+    loan.balance = +input.balance;
+    loan.rate = +input.rate || 0;
+    loan.minPayment = +input.minPayment || 0;
+  } else {
+    loan.creditor = input.creditor || input.name;
+    loan.balance = +input.balance;
+    loan.offer = input.offer ? +input.offer : null;
+    loan.offerInstallments = input.offerInstallments || null;
+    loan.since = input.since || '';
+    loan.status = 'aberta';
+    loan.rate = 0;
+  }
+  commit((s) => s.loans.push(loan));
+  return loan.id;
+}
+
+export function deleteLoan(id) {
+  commit((s) => (s.loans = s.loans.filter((l) => l.id !== id)));
+}
+
+/** Registra pagamento: gera um gasto em "Dívidas e empréstimos" e atualiza a dívida. */
+export function payLoan(id, amount, date = toISO(new Date())) {
+  commit((s) => {
+    const l = s.loans.find((x) => x.id === id);
+    if (!l) return;
+    const value = round2(amount ?? (l.mode === 'parcelado' ? l.pmt : l.mode === 'acordo' ? l.offer || l.balance : l.minPayment));
+    l.payments.push({ date, amount: value });
+    if (l.mode === 'parcelado') l.paid = Math.min(l.n, l.paid + 1);
+    else if (l.mode === 'rotativo') l.balance = Math.max(0, round2(l.balance - value));
+    else l.status = 'quitada';
+    s.transactions.push({
+      id: uid(),
+      type: 'expense',
+      amount: value,
+      description: l.mode === 'parcelado' ? `${l.name} (parcela ${l.paid}/${l.n})` : l.mode === 'acordo' ? `Quitação ${l.name}` : `Pagamento ${l.name}`,
+      category: 'dividas',
+      classification: 'essencial',
+      date,
+      time: '',
+      method: 'pix',
+      card: '',
+      merchant: l.creditor || '',
+      location: '',
+      source: 'divida',
+      loanId: l.id,
+      createdAt: Date.now(),
+    });
+  });
+}
+
+/** Amortização extra num parcelado: mantém a parcela e reduz o prazo. */
+export function amortizeLoan(id, extra, date = toISO(new Date())) {
+  commit((s) => {
+    const l = s.loans.find((x) => x.id === id);
+    if (!l || l.mode !== 'parcelado') return;
+    const bal = outstandingBalance(l.principal, l.rate, l.n, l.paid);
+    const value = round2(Math.min(extra, bal));
+    const left = bal - value;
+    const nextDue = addMonthsISO(l.firstDue, l.paid);
+    const n = left > 0.005 ? periodsToPayoff(left, l.rate, l.pmt) : 0;
+    l.payments.push({ date, amount: value, extra: true });
+    if (n > 0 && Number.isFinite(n)) Object.assign(l, { principal: round2(left), n, paid: 0, firstDue: nextDue, pmt: round2(pricePayment(left, l.rate, n)) });
+    else Object.assign(l, { paid: l.n });
+    s.transactions.push({ id: uid(), type: 'expense', amount: value, description: `Amortização ${l.name}`, category: 'dividas', classification: 'essencial', date, time: '', method: 'pix', card: '', merchant: '', location: '', source: 'divida', loanId: l.id, createdAt: Date.now() });
+  });
+}
+
+/** Fechar acordo parcelado de uma dívida negativada: vira um parcelamento sem juros. */
+export function negotiateLoan(id, { n, pmt, firstDue }) {
+  commit((s) => {
+    const l = s.loans.find((x) => x.id === id);
+    if (!l) return;
+    Object.assign(l, { mode: 'parcelado', principal: round2(n * pmt), n, pmt, rate: 0, paid: 0, firstDue, status: 'negociada', kind: 'acordo' });
+  });
+}
+
+export function setBudget(catId, value) {
+  commit((s) => {
+    if (value > 0) s.budgets[catId] = value;
+    else delete s.budgets[catId];
+  });
+}
+
+export function updateSettings(patch) {
+  commit((s) => Object.assign(s.settings, patch));
+}
+
+export function exportJSON() {
+  return JSON.stringify(state, null, 2);
+}
+
+export function importJSON(text) {
+  const data = JSON.parse(text);
+  if (!data || !Array.isArray(data.transactions)) throw new Error('Arquivo não parece um backup deste app.');
+  replaceState(data);
+}
+
+// ---------- Sincronização com a conta Claude (só quando roda como Artifact) ----------
+// Os dados ficam em data/users/<id>/ — pasta privada de cada pessoa no banco do artifact.
+// Documentos: "meta" (ajustes, orçamentos), "goals", "loans" e um por mês de lançamentos ("tx-AAAA-MM").
+
+export const cloud = {
+  status: 'local', // 'local' | 'conectando' | 'sincronizado' | 'erro'
+  col: null,
+  timer: null,
+  written: new Map(),
+  onStatus: () => {},
+
+  setStatus(s) {
+    this.status = s;
+    this.onStatus(s);
+  },
+
+  async connect() {
+    const c = typeof window !== 'undefined' ? window.claude : null;
+    if (!c?.use) return;
+    this.setStatus('conectando');
+    try {
+      const [db, user] = await Promise.all([c.use('db'), c.use('user')]);
+      if (!db || !user) return this.setStatus('local');
+      const id = await user.id();
+      if (!id) return this.setStatus('local');
+      this.col = db.collection(`data/users/${id}`);
+      const snap = await this.col.get();
+      const docs = Object.fromEntries(snap.docs.map((d) => [d.id, d.data()]));
+      const remoteAt = docs.meta?.updatedAt || 0;
+      if (remoteAt > (state.settings.demo ? 0 : state.updatedAt)) {
+        const remote = {
+          ...empty(),
+          updatedAt: remoteAt,
+          settings: { ...empty().settings, ...(docs.meta.settings || {}) },
+          budgets: docs.meta.budgets || {},
+          goals: docs.goals?.items || [],
+          loans: docs.loans?.items || [],
+          transactions: Object.entries(docs)
+            .filter(([k]) => k.startsWith('tx-'))
+            .flatMap(([, v]) => v.items || []),
+        };
+        for (const [k, v] of Object.entries(docs)) this.written.set(k, JSON.stringify(v));
+        state = migrate(remote);
+        writeLocal();
+        listeners.forEach((fn) => fn(state));
+      } else {
+        for (const [k, v] of Object.entries(docs)) this.written.set(k, JSON.stringify(v));
+        await this.flush();
+      }
+      this.setStatus('sincronizado');
+    } catch (e) {
+      console.warn('Sincronização indisponível', e);
+      this.col = null;
+      this.setStatus('local');
+    }
+  },
+
+  schedule() {
+    if (!this.col) return;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.flush(), 800);
+  },
+
+  async flush() {
+    if (!this.col) return;
+    const docs = {
+      meta: { updatedAt: state.updatedAt, settings: state.settings, budgets: state.budgets },
+      goals: { items: state.goals },
+      loans: { items: state.loans },
+    };
+    for (const t of state.transactions) {
+      const k = `tx-${monthKey(t.date)}`;
+      (docs[k] = docs[k] || { items: [] }).items.push(t);
+    }
+    try {
+      // "meta" por último: o horário dela só avança depois que o resto foi gravado
+      const entries = Object.entries(docs).sort(([a], [b]) => (a === 'meta') - (b === 'meta'));
+      for (const [k, v] of entries) {
+        const json = JSON.stringify(v);
+        if (this.written.get(k) === json) continue;
+        await this.col.doc(k).set(v);
+        this.written.set(k, json);
+      }
+      for (const k of [...this.written.keys()]) {
+        if (!docs[k]) {
+          await this.col.doc(k).delete();
+          this.written.delete(k);
+        }
+      }
+      this.setStatus('sincronizado');
+    } catch (e) {
+      console.warn('Falha ao sincronizar', e);
+      this.setStatus('erro');
+    }
+  },
+};

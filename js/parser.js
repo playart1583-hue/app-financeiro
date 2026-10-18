@@ -1,0 +1,273 @@
+// Interpretação de texto: registro rápido ("mercado 52,30 débito"), texto de comprovantes/notificações
+// (vindo de OCR ou colado) e lista de dívidas do Serasa. Tudo puro, sem DOM.
+import { categorize, normalize } from './categories.js';
+
+export const pad = (n) => String(n).padStart(2, '0');
+export const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+/** "1.234,56" | "1234.56" | "52,3" | "R$ 52" -> número */
+export function parseAmount(raw) {
+  if (raw == null) return NaN;
+  let s = String(raw).replace(/[^\d.,-]/g, '');
+  if (!s) return NaN;
+  const hasComma = s.includes(',');
+  if (hasComma) s = s.replace(/\./g, '').replace(',', '.');
+  else {
+    const parts = s.split('.');
+    // "1.234" = mil e duzentos; "12.50" = doze e cinquenta
+    if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) s = parts.join('');
+  }
+  const v = parseFloat(s);
+  return Number.isFinite(v) ? v : NaN;
+}
+
+const MONEY_RE = /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/;
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+function methodFrom(t) {
+  if (/pix\s*parcelad|parcelamento\s*(?:via|no|do)\s*pix/.test(t)) return 'pix_parcelado';
+  if (/\bcredito\b|\bcred\b|cartao de credito/.test(t)) return 'credito';
+  if (/\bdebito\b|\bdeb\b/.test(t)) return 'debito';
+  if (/\bcartao\b/.test(t)) return 'credito';
+  if (/\bdebito\b|\bdeb\b/.test(t)) return 'debito';
+  if (/\bpix\b/.test(t)) return 'pix';
+  if (/\bboleto\b/.test(t)) return 'boleto';
+  if (/\bdinheiro\b|\bespecie\b/.test(t)) return 'dinheiro';
+  if (/\bted\b|\bdoc\b|transferencia/.test(t)) return 'transferencia';
+  return null;
+}
+
+function relativeDate(t, today) {
+  const d = new Date(today);
+  if (/\banteontem\b/.test(t)) d.setDate(d.getDate() - 2);
+  else if (/\bontem\b/.test(t)) d.setDate(d.getDate() - 1);
+  else if (/\bhoje\b/.test(t)) return toISO(d);
+  else return null;
+  return toISO(d);
+}
+
+/** Procura data em formatos brasileiros. Retorna 'YYYY-MM-DD' ou null. */
+export function findDate(text, today = new Date()) {
+  const t = normalize(text);
+  let m = t.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/) || t.match(/\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b/);
+  if (m) {
+    const day = +m[1];
+    const mon = +m[2];
+    let year = m[3] ? +m[3] : today.getFullYear();
+    if (year < 100) year += 2000;
+    if (day >= 1 && day <= 31 && mon >= 1 && mon <= 12) return `${year}-${pad(mon)}-${pad(day)}`;
+  }
+  m = t.match(/\b(\d{1,2})\s*(?:de\s*)?(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?\s*(?:de\s*)?(\d{4})?/);
+  if (m) {
+    const mon = MONTHS.indexOf(m[2]) + 1;
+    const year = m[3] ? +m[3] : today.getFullYear();
+    return `${year}-${pad(mon)}-${pad(+m[1])}`;
+  }
+  return relativeDate(t, today);
+}
+
+export function findTime(text) {
+  const t = normalize(text);
+  const m = t.match(/\b([01]?\d|2[0-3])(?::|h)([0-5]\d)(?::[0-5]\d)?\b/);
+  return m ? `${pad(+m[1])}:${m[2]}` : null;
+}
+
+function findInstallments(t) {
+  // "3x de R$ 50,00", "10x 89,90", "em 6 parcelas de 120,00", "parcela 2/10"
+  let m = t.match(/\b(\d{1,2})\s*x\s*(?:de\s*)?(?:r\$\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?)?/);
+  if (m && +m[1] > 0 && +m[1] <= 72) return { n: +m[1], pmt: m[2] ? parseAmount(m[2]) : null };
+  m = t.match(/\b(?:em\s*)?(\d{1,2})\s*parcelas?(?:\s*(?:mensais|iguais))?(?:\s*de\s*(?:r\$\s*)?(\d[\d.,]*))?/);
+  if (m && +m[1] > 0) return { n: +m[1], pmt: m[2] ? parseAmount(m[2]) : null };
+  return null;
+}
+
+/**
+ * Registro rápido por texto: "almoço 32,90 débito", "+ salário 4500", "uber 18 ontem", "tênis 3x 120 crédito".
+ */
+export function parseQuickEntry(input, today = new Date()) {
+  const raw = String(input || '').trim();
+  const t = normalize(raw);
+  const income = /^\+/.test(raw) || /\b(recebi|ganhei|salario|entrada|freela|reembolso|rendimento|vendi)\b/.test(t);
+  const inst = findInstallments(t);
+  // remove trechos de parcelas e datas antes de procurar o valor
+  let rest = t
+    .replace(/\b\d{1,2}\s*x\s*(?:de\s*)?/g, ' ')
+    .replace(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/g, ' ')
+    .replace(/\b([01]?\d|2[0-3])(?::|h)[0-5]\d\b/g, ' ');
+  const nums = [...rest.matchAll(new RegExp(MONEY_RE.source, 'g'))].map((m) => parseAmount(m[1])).filter((v) => v > 0);
+  let amount = nums.length ? nums[nums.length - 1] : NaN;
+  if (inst?.pmt && !nums.length) amount = inst.pmt * inst.n;
+  else if (inst && inst.n > 1 && amount > 0 && /\d\s*x\s*(?:de\s*)?(?:r\$\s*)?\d/.test(t)) amount = amount * inst.n; // "3x 120" = 360
+
+  const method = methodFrom(t);
+  const date = findDate(t, today) || toISO(today);
+  const description = raw
+    .replace(/^\+\s*/, '')
+    .replace(/r\$\s*/gi, '')
+    .replace(/\b\d{1,2}\s*x\s*(?:de\s*)?/gi, '')
+    .replace(/\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?/g, '')
+    .replace(/\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?/g, '')
+    .replace(/(?<![\p{L}])(hoje|ontem|anteontem|no|na|de|em|via|pix parcelado|pix|cr[eé]dito|d[eé]bito|cart[aã]o|dinheiro|boleto|recebi|ganhei)(?![\p{L}])/giu, '')
+    .replace(/[/:]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  const type = income ? 'income' : 'expense';
+  return {
+    type,
+    amount: Number.isFinite(amount) ? amount : NaN,
+    description: description ? description[0].toUpperCase() + description.slice(1) : '',
+    category: categorize(raw, type) || (income ? 'outros-ganhos' : 'outros'),
+    method: method || (income ? 'pix' : 'pix'),
+    date,
+    installments: inst && inst.n > 1 ? inst.n : 1,
+  };
+}
+
+const BANKS = ['nubank', 'itau', 'bradesco', 'santander', 'banco do brasil', 'caixa', 'inter', 'c6', 'picpay', 'mercado pago', 'neon', 'next', 'original', 'btg', 'xp', 'sicoob', 'sicredi', 'pagbank', 'pagseguro', 'will bank', 'porto', 'ourocard'];
+const BRANDS = ['visa', 'mastercard', 'master', 'elo', 'hipercard', 'amex', 'american express'];
+
+/** Encontra informações do cartão: "final 1234", "**** 1234", bandeira, banco. */
+export function findCard(text) {
+  const t = normalize(text);
+  const m = t.match(/(?:final|terminad[oa] em|\*{2,}\s?|x{4}\s?|•{2,}\s?)\s*(\d{4})\b/);
+  const brand = BRANDS.find((b) => new RegExp(`\\b${b}\\b`).test(t));
+  const bank = BANKS.find((b) => new RegExp(`\\b${b}\\b`).test(t));
+  if (!m && !brand && !bank) return null;
+  return {
+    last4: m ? m[1] : null,
+    brand: brand ? (brand === 'master' ? 'Mastercard' : brand[0].toUpperCase() + brand.slice(1)) : null,
+    bank: bank ? bank.replace(/\b\w/g, (c) => c.toUpperCase()) : null,
+  };
+}
+
+export function cardLabel(card) {
+  if (!card) return '';
+  return [card.bank, card.brand, card.last4 ? `final ${card.last4}` : null].filter(Boolean).join(' · ');
+}
+
+const MERCHANT_LABEL = /^(?:estabelecimento|loja|local|comercio|favorecido|recebedor|destinatario|para|nome|beneficiario|empresa)(?:\s*[:\-]\s*(.+))?$/i;
+
+/**
+ * Lê o texto de um comprovante, notificação de compra ou extrato.
+ * Retorna campos com o que foi possível identificar (null quando não encontrado).
+ */
+export function parseReceiptText(text, today = new Date()) {
+  const original = String(text || '');
+  const lines = original.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const t = normalize(original);
+
+  // valor: prioriza linhas com "total"/"valor"; senão o primeiro R$; senão o maior número com centavos
+  let amount = NaN;
+  const KEY = /total|valor|compra|pagamento|pago|transferido/;
+  let priority = null;
+  for (let k = 0; k < lines.length && !priority; k++) {
+    const n = normalize(lines[k]);
+    if (!KEY.test(n) || /a vista|parcela|\dx/.test(n)) continue;
+    if (/\d+[.,]\d{2}/.test(lines[k])) priority = lines[k];
+    else if (lines[k + 1] && /^\s*(r\$)?\s*[\d.,]+\s*$/i.test(lines[k + 1])) priority = lines[k + 1];
+  }
+  const grab = (s) => {
+    const m = s.match(/r\$\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+[.,]\d{2})/i) || s.match(/(\d{1,3}(?:\.\d{3})*,\d{2})/);
+    return m ? parseAmount(m[1]) : NaN;
+  };
+  if (priority) amount = grab(priority);
+  if (!(amount > 0)) amount = grab(original);
+
+  const inst = findInstallments(t);
+  let installments = 1;
+  let installmentValue = null;
+  if (inst && inst.n > 1) {
+    installments = inst.n;
+    installmentValue = inst.pmt;
+  }
+  if (/\ba vista\b/.test(t) && !inst) installments = 1;
+
+  // merchant
+  let merchant = null;
+  for (let k = 0; k < lines.length; k++) {
+    const m = normalize(lines[k]).match(MERCHANT_LABEL);
+    if (m) {
+      merchant = (m[1] ? lines[k].slice(lines[k].length - m[1].length) : lines[k + 1]) || null;
+      break;
+    }
+  }
+  if (!merchant) {
+    // notificação: "Compra aprovada ... em PADARIA DOCE PAO" / "no(a) LOJA X"
+    const m = original.match(/\b(?:em|no|na|no\(a\))\s+([A-Z0-9][A-Z0-9 &*.'\-]{2,40})(?=\s+(?:para|com|em|no|na|dia|às|as|valor|r\$)\b|[.,\n]|$)/);
+    if (m) merchant = m[1].trim();
+  }
+  if (merchant) merchant = merchant.replace(/\s{2,}/g, ' ').replace(/[*]+/g, ' ').trim();
+
+  const cityMatch = original.match(/(?:cidade|local)\s*[:\-]\s*([^\n]+)/i);
+  const method = methodFrom(t) || (inst && inst.n > 1 ? 'credito' : null);
+  const card = findCard(original);
+  const date = findDate(original, today);
+  const time = findTime(original);
+  const income = /\b(recebid[oa]|voce recebeu|credito em conta|deposito recebido|pix recebido)\b/.test(t);
+  const desc = merchant || lines[0] || '';
+  const category = categorize(desc, income ? 'income' : 'expense') || categorize(original, income ? 'income' : 'expense');
+
+  let cashPrice = null;
+  const cash = original.match(/(?:a vista|à vista|valor original|valor do produto|preco a vista)\D{0,15}(\d{1,3}(?:\.\d{3})*,\d{2}|\d+[.,]\d{2})/i);
+  if (cash) cashPrice = parseAmount(cash[1]);
+  // convenção do app: no parcelado com juros, "valor" é o preço à vista e a parcela vai à parte
+  if (cashPrice && installments > 1) amount = cashPrice;
+  else if (installments > 1 && installmentValue && Math.abs(amount - installmentValue) < 0.01) amount = installmentValue * installments;
+
+  return {
+    type: income ? 'income' : 'expense',
+    amount: amount > 0 ? amount : null,
+    merchant,
+    description: merchant || null,
+    date,
+    time,
+    method,
+    card,
+    installments,
+    installmentValue,
+    cashPrice,
+    location: cityMatch ? cityMatch[1].trim() : null,
+    category: category || null,
+  };
+}
+
+/**
+ * Lê a lista de dívidas copiada do Serasa Limpa Nome (ou de um print via OCR).
+ * Formato típico por bloco:
+ *   "BANCO X S.A." / "Dívida de R$ 2.345,67" / "Pague R$ 480,00 à vista" / "80% de desconto"
+ */
+export function parseSerasaText(text) {
+  const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const debts = [];
+  let cur = null;
+  const push = () => {
+    if (cur && (cur.balance || cur.offer)) debts.push(cur);
+    cur = null;
+  };
+  const money = (l) => {
+    const m = l.match(/(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/);
+    return m ? parseAmount(m[1]) : null;
+  };
+  for (const line of lines) {
+    const n = normalize(line);
+    const v = money(line);
+    const isHeader = !v && /[a-z]/i.test(line) && !/\d{1,2}\/\d{1,2}/.test(line) && !/(desconto|oferta|pague|desde|venc|atualizad|original|parcel|ver |detalhes|negociar|acordo|limpa nome|serasa|contrato|origem|data)/.test(n) && line.length <= 60;
+    if (isHeader) {
+      if (cur && (cur.balance || cur.offer)) push();
+      if (!cur) cur = { creditor: line.replace(/\s{2,}/g, ' '), balance: null, offer: null, offerInstallments: null, since: null };
+      continue;
+    }
+    if (!cur) cur = { creditor: 'Credor não identificado', balance: null, offer: null, offerInstallments: null, since: null };
+    if (v != null) {
+      if (/(pague|a vista|por apenas|oferta|quitar|acordo|negocie)/.test(n) && !/(parcela|\dx)/.test(n)) cur.offer = v;
+      else if (/(\d{1,2})\s*x|parcela/.test(n)) {
+        const k = n.match(/(\d{1,2})\s*x|(\d{1,2})\s*parcelas/);
+        cur.offerInstallments = { n: k ? +(k[1] || k[2]) : null, pmt: v };
+      } else if (cur.balance == null || /(divida|valor atualizado|total|deve)/.test(n)) cur.balance = v;
+    }
+    const d = findDate(line);
+    if (d && /(desde|vencid|data|origem)/.test(n)) cur.since = d;
+  }
+  push();
+  return debts.map((d) => ({ ...d, balance: d.balance ?? d.offer, discount: d.balance && d.offer ? 1 - d.offer / d.balance : 0 }));
+}
