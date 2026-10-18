@@ -250,6 +250,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); out
 .more[open] summary { margin-bottom: 10px; }
 .more > .card { margin-top: 10px; }
 .form-actions { display: flex; gap: 8px; position: sticky; bottom: 0; padding-top: 6px; background: var(--surface); }
+/* na folha, os botões fixos cobrem até a borda: nada do formulário aparece por baixo deles nem atrás da barra do Android */
+.sheet .form-actions {
+  --pad: calc(20px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  bottom: calc(-1 * var(--pad));
+  padding-bottom: var(--pad);
+  margin-bottom: calc(-1 * var(--pad));
+  z-index: 1;
+}
 .form-shortcuts { display: flex; gap: 8px; }
 .confirm-row { display: flex; gap: 6px; }
 

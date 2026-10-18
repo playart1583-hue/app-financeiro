@@ -80,9 +80,11 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
     ${extractedBanner(extracted, engine)}
     ${dupTx ? html`<p class="status error">${icon('alert')}<span>Parece que você já registrou isso: <b>${dupTx.description}</b> em ${dateBR(dupTx.date)}${dupTx.time ? ` às ${dupTx.time}` : ''}. Salve só se for outra movimentação.</span></p>` : ''}
     <div class="seg" role="radiogroup" aria-label="Tipo">
-      <label><input type="radio" name="type" value="expense" ${v.type === 'expense' ? 'checked' : ''}><span>${icon('arrowDown')} Gasto</span></label>
-      <label><input type="radio" name="type" value="income" ${v.type === 'income' ? 'checked' : ''}><span>${icon('arrowUp')} Ganho</span></label>
+      <label><input type="radio" name="type" value="expense" ${v.type === 'expense' && !v.internal ? 'checked' : ''}><span>${icon('arrowDown')} Gasto</span></label>
+      <label><input type="radio" name="type" value="income" ${v.type === 'income' && !v.internal ? 'checked' : ''}><span>${icon('arrowUp')} Ganho</span></label>
+      <label><input type="radio" name="type" value="transfer" ${v.internal ? 'checked' : ''}><span>↔ Entre contas</span></label>
     </div>
+    <p class="hint" id="f-transfer-hint" ${v.internal ? '' : 'hidden'}>Dinheiro passando de uma conta sua para outra (ex.: Mercado Pago → Santander). Aparece no extrato, mas não conta como gasto nem ganho.</p>
     <label class="amount-field"><span class="sr-only">Valor</span><span class="cur">R$</span>
       <input id="f-amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${moneyInput(v.amount)}" required>
     </label>
@@ -90,8 +92,8 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
     <p class="field-error" id="f-err" hidden></p>
     <label class="field"><span>Descrição</span><input id="f-desc" name="description" list="f-desc-list" autocomplete="off" placeholder="Ex.: Mercado, Uber, Salário" value="${v.description}"></label>
     <datalist id="f-desc-list">${knownDescriptions().map((d) => html`<option value="${d}"></option>`)}</datalist>
-    <fieldset class="field"><legend>Categoria</legend><div class="chips wrap" id="f-cats">${catChips(v.type, v.category)}</div></fieldset>
-    <fieldset class="field" id="f-cls-wrap" ${v.type === 'income' ? 'hidden' : ''}><legend>Classificação</legend>
+    <fieldset class="field" id="f-cat-wrap" ${v.internal ? 'hidden' : ''}><legend>Categoria</legend><div class="chips wrap" id="f-cats">${catChips(v.type, v.category)}</div></fieldset>
+    <fieldset class="field" id="f-cls-wrap" ${v.type === 'income' || v.internal ? 'hidden' : ''}><legend>Classificação</legend>
       <div class="seg three" role="radiogroup">${Object.entries(CLASSIFICATIONS).map(([k, c]) => html`<label title="${c.hint}"><input type="radio" name="classification" value="${k}" ${v.classification === k ? 'checked' : ''}><span>${c.label}</span></label>`)}</div>
     </fieldset>
     <div class="row2">
@@ -109,18 +111,17 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
         <div id="f-juros" class="juros" hidden></div>
         <label class="check" id="f-rec-wrap"><input type="checkbox" id="f-rec" name="recurring"> <span>Repetir todo mês (conta fixa, salário)</span></label>`
       : ''}
-    <label class="check"><input type="checkbox" id="f-internal" name="internal" ${v.internal ? 'checked' : ''}> <span>Transferência entre minhas contas (ex.: Santander → Mercado Pago). Não conta como gasto nem ganho.</span></label>
     <details class="more" ${extracted || v.merchant ? 'open' : ''}><summary>Mais detalhes</summary>
       <div class="row2">
         <label class="field"><span>Estabelecimento</span><input id="f-merchant" name="merchant" value="${v.merchant || ''}" autocomplete="off"></label>
         <label class="field"><span>Local</span><input id="f-location" name="location" value="${v.location || ''}" autocomplete="off" placeholder="Cidade, bairro"></label>
       </div>
     </details>
+    ${group ? html`<label class="check"><input type="checkbox" id="f-group"> <span>Aplicar descrição, categoria e cartão a todas as ${editing.installment ? 'parcelas' : 'repetições'}</span></label>` : ''}
     <div class="form-actions">
       ${editing ? html`<button type="button" class="btn danger ghost" data-del>${icon('trash')} Excluir</button>` : ''}
       <button type="submit" class="btn primary grow" id="f-submit">${editing ? 'Salvar alterações' : v.type === 'income' ? 'Salvar ganho' : 'Salvar gasto'}</button>
     </div>
-    ${group ? html`<label class="check"><input type="checkbox" id="f-group"> <span>Aplicar descrição, categoria e cartão a todas as ${editing.installment ? 'parcelas' : 'repetições'}</span></label>` : ''}
   </form>`;
 
   openSheet({
@@ -135,7 +136,9 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
       const sync = () => {
         const type = radio('type');
         const method = radio('method');
-        $('#f-cls-wrap').hidden = type === 'income';
+        $('#f-cls-wrap').hidden = type !== 'expense';
+        $('#f-cat-wrap').hidden = type === 'transfer';
+        $('#f-transfer-hint').hidden = type !== 'transfer';
         $('#f-card-wrap').hidden = !['credito', 'debito', 'pix_parcelado'].includes(method) && !val('card');
         if ($('#f-inst-wrap')) {
           const canInstall = type === 'expense' && INSTALLMENT_METHODS.includes(method);
@@ -146,7 +149,7 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           $('#f-rec-wrap').hidden = n > 1;
           renderJuros(n, method);
         }
-        $('#f-submit').textContent = editing ? 'Salvar alterações' : type === 'income' ? 'Salvar ganho' : 'Salvar gasto';
+        $('#f-submit').textContent = editing ? 'Salvar alterações' : type === 'income' ? 'Salvar ganho' : type === 'transfer' ? 'Salvar transferência' : 'Salvar gasto';
       };
 
       const renderJuros = (n, method) => {
@@ -179,7 +182,9 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
       };
 
       f.addEventListener('change', (e) => {
-        if (e.target.name === 'type') {
+        if (e.target.name === 'type' && radio('type') === 'transfer') {
+          if (!val('description') || val('description') === getCategory(radio('category')).name) f.elements.description.value = 'Transferência entre contas';
+        } else if (e.target.name === 'type') {
           const type = radio('type');
           f.elements.description.value = swapLabel(val('description'), type);
           $('#f-cats').innerHTML = String(html`${catChips(type, type === 'income' ? 'salario' : 'outros')}`);
@@ -246,10 +251,12 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           err.textContent = 'Escolha a data.';
           return;
         }
-        const type = radio('type');
+        // "Entre contas" guarda o lado original (saiu/entrou) e marca como interna
+        const internal = radio('type') === 'transfer';
+        const type = internal ? editing?.type || 'expense' : radio('type');
         const method = radio('method');
-        const category = radio('category');
-        const n = type === 'expense' && INSTALLMENT_METHODS.includes(method) ? Math.max(1, Math.min(72, Math.floor(+val('installments') || 1))) : 1;
+        const category = radio('category') || (type === 'income' ? 'outros-ganhos' : 'outros');
+        const n = !internal && type === 'expense' && INSTALLMENT_METHODS.includes(method) ? Math.max(1, Math.min(72, Math.floor(+val('installments') || 1))) : 1;
         const pmt = readMoney(val('installmentValue'));
         const draft = {
           type,
@@ -263,7 +270,7 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           card: val('card')?.trim() || '',
           merchant: val('merchant')?.trim() || '',
           location: val('location')?.trim() || '',
-          internal: f.querySelector('#f-internal').checked,
+          internal,
         };
         if (editing) {
           const { amount: _a, ...rest } = draft;
@@ -297,7 +304,7 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
         }
         const ids = addTransaction({ ...draft, installments: n, installmentValue: n > 1 && pmt > 0 ? pmt : null, recurring: n === 1 && f.querySelector('#f-rec')?.checked, source: extracted ? 'print' : 'manual' });
         sheet.close();
-        const what = type === 'income' ? 'Ganho' : 'Gasto';
+        const what = internal ? 'Transferência' : type === 'income' ? 'Ganho' : 'Gasto';
         toast(n > 1 ? `${what} salvo em ${n} parcelas` : ids.length > 1 ? `${what} salvo para os próximos 12 meses` : `${what} de ${money(amount, { force: true })} salvo`, {
           action: 'Desfazer',
           onAction: () => ids.forEach((id) => deleteTransaction(id)),

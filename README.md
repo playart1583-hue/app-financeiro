@@ -33,7 +33,7 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 | **Botão +** com todas as entradas: preencher à mão, ler print, documento ou fatura, colar texto, várias notificações, contrato de empréstimo | Barra inferior |
 | **Colar texto**: notificações, linhas de extrato, texto de fatura ou anotações ("almoço 32,90 débito", uma por linha) viram lançamentos para conferir | + → *Colar texto* |
 | **Entrada × saída nas notificações**: entende "você enviou", "te enviou", "recebeu seu Pix", "recebido por" etc. Se algum entrar do lado errado, troque receita/despesa no lançamento: o app aprende o modelo daquela notificação e oferece corrigir as parecidas | Extrato → tocar no lançamento |
-| **Transferências entre suas contas** (ex.: Santander → Mercado Pago): aparecem no extrato com ↔️ e não contam como gasto nem ganho. O app reconhece o par (saiu de um app e entrou no outro com o mesmo valor em até 30 min), o seu nome como destinatário e frases como "mesma titularidade"; dá para marcar à mão no lançamento | Extrato · Ajustes → *Seu nome completo* |
+| **Transferências entre suas contas** (ex.: Santander → Mercado Pago): aparecem no extrato com ↔️ e não contam como gasto nem ganho. O app reconhece o par (saiu de um app e entrou no outro com o mesmo valor em até 30 min), o seu nome como destinatário e frases como "mesma titularidade"; dá para marcar à mão em *Gasto · Ganho · ↔ Entre contas* no lançamento | Extrato · Ajustes → *Seu nome completo* |
 | **Bloqueio por digital** (app Android): pede digital, rosto ou senha do celular ao abrir e ao voltar depois de 30 s | Ajustes → *Bloqueio por digital* |
 
 ## App Android (APK)
