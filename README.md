@@ -33,10 +33,12 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 
 ## App Android (APK)
 
-O app também é empacotado como APK com o [Capacitor](https://capacitorjs.com). No Android ele ganha dois recursos que o navegador não tem:
+O app também é empacotado como APK com o [Capacitor](https://capacitorjs.com), em duas variantes (mesmo app, mesma assinatura — dá para trocar de uma para a outra sem perder dados):
 
-- **Registro automático das notificações** do Mercado Pago, 99, 99Pay, Nubank, Inter, Itaú, Bradesco, Santander, Caixa, BB, PicPay, C6, PagBank e carteiras digitais (só as que têm valor em R$). É preciso liberar em *Ajustes → Registro automático das notificações*. Em Android 13+ com APK instalado fora da Play Store, antes é preciso permitir "configurações restritas" nas informações do app.
-- **Compartilhar → Meu Bolso** para prints, textos, PDF de fatura, CSV, OFX e planilhas.
+- **`meu-bolso-X.apk` (leve, recomendada):** instala normalmente fora da Play Store. O registro automático das notificações é feito com o **MacroDroid** (Play Store), que repassa cada notificação para o Meu Bolso pelo broadcast `br.com.meubolso.app.REGISTRAR` (extra `texto`), sem abrir o app. O passo a passo está em *Ajustes*.
+- **`meu-bolso-X-completo.apk`:** o próprio app lê as notificações do Mercado Pago, 99, 99Pay e bancos. **No Brasil, o Google Play Protect bloqueia a instalação** de APKs baixados da internet que pedem acesso às notificações; essa variante serve para instalar via computador (`adb install`) ou para uma futura publicação na Play Store.
+
+Nas duas: **Compartilhar → Meu Bolso** para prints, textos, PDF de fatura, CSV, OFX e planilhas.
 
 Instalar: baixe o APK mais recente em **Releases** (ou `dist/`) no celular, abra e permita "instalar apps desconhecidos" para o app que você usou para abrir o arquivo.
 
@@ -45,7 +47,7 @@ Gerar de novo:
 ```bash
 npm install
 npm run android:apk        # precisa de JDK 21 e Android SDK (ANDROID_HOME)
-# saída: android/app/build/outputs/apk/release/app-release.apk
+# saída: android/app/build/outputs/apk/{leve,completo}/release/
 ```
 
 Ou pelo GitHub: *Actions → APK Android → Run workflow* (também roda a cada push). O APK é publicado em **Releases**, pronto para baixar no celular, e fica também em *Artifacts* da execução. Em repositório privado, o GitHub Actions precisa estar liberado na conta (Settings → Billing and plans).
@@ -91,7 +93,7 @@ Nenhum dos dois oferece uma API para apps pessoais lerem o extrato: a API do Mer
 
 1. **Print ou texto** (Android e iPhone): Início → *Notificações*.
 2. **Compartilhar** (Android, app instalado na tela inicial): o app aparece no menu Compartilhar e recebe prints e textos.
-3. **Automação** (Android): no MacroDroid, gatilho *Notificação recebida* (Mercado Pago, 99, 99Pay, banco) e ação *Abrir site* com `https://SEU-ENDERECO/?registrar={not_title} {notification}`. O app registra sozinho e mostra "Desfazer"; repetidos pedem confirmação.
+3. **Automação** (Android): no MacroDroid, gatilho *Notificação recebida* (Mercado Pago, 99, 99Pay, banco) e ação *Abrir site* com `https://SEU-ENDERECO/?registrar=[not_title] [notification]`. O app registra sozinho e mostra "Desfazer"; repetidos pedem confirmação.
 
 A conexão direta com bancos e carteiras exige Open Finance via um agregador autorizado (Pluggy, Belvo), com servidor e contrato: é o próximo passo natural se o protótipo virar produto.
 

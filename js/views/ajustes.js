@@ -2,7 +2,7 @@ import { monthlyToAnnual } from '../finance.js';
 import { currentEngine } from '../receipt.js';
 import { cloud, exportJSON, getApiKey, importJSON, loadDemo, resetAll, setApiKey, updateSettings } from '../store.js';
 import { html, icon, pct, toast } from '../ui.js';
-import { isNativeApp, nativeReader, notificationAccess } from '../native.js';
+import { isNativeApp, nativeFeatures, nativeReader, notificationAccess } from '../native.js';
 
 const SYNC = {
   local: 'Os dados ficam só neste aparelho. Faça backup de vez em quando.',
@@ -28,14 +28,31 @@ async function saveFile(name, text) {
 
 function nativeSection(st) {
   return html`<section class="card" id="auto"><h2 class="card-title">${icon('bell')} Registro automático das notificações</h2>
-    <p class="hint">Com o acesso liberado, o Meu Bolso lê as notificações com valor em reais do Mercado Pago, 99, 99Pay, Nubank, Inter, Itaú, Bradesco, Santander, Caixa, BB, PicPay, C6, PagBank e carteiras digitais, e registra sozinho. Nada sai do seu celular.</p>
     <p class="status" id="nat-status">Verificando…</p>
-    <div class="btn-row"><button type="button" class="btn primary sm" id="nat-open">${icon('bell')} Liberar acesso às notificações</button><button type="button" class="btn sm" id="nat-info">Configurações do app</button></div>
-    <ol class="bullets">
-      <li>Toque em <b>Liberar acesso às notificações</b>, encontre <b>Meu Bolso</b> e ative.</li>
-      <li>Se o Android avisar que é uma <b>configuração restrita</b> (Android 13 ou mais novo, em apps instalados fora da Play Store): toque em <b>Configurações do app</b>, no menu ⋮ do canto superior e em <b>Permitir configurações restritas</b>. Depois volte e ative o acesso.</li>
-      <li>Também dá para usar <b>Compartilhar → Meu Bolso</b> em prints, textos, PDF de fatura, CSV, OFX e planilhas.</li>
-    </ol>
+    <div id="nat-listener" hidden>
+      <p class="hint">Com o acesso liberado, o Meu Bolso lê as notificações com valor em reais do Mercado Pago, 99, 99Pay, Nubank, Inter, Itaú, Bradesco, Santander, Caixa, BB, PicPay, C6, PagBank e carteiras digitais, e registra sozinho. Nada sai do seu celular.</p>
+      <div class="btn-row"><button type="button" class="btn primary sm" id="nat-open">${icon('bell')} Liberar acesso às notificações</button><button type="button" class="btn sm" id="nat-info">Configurações do app</button></div>
+      <ol class="bullets">
+        <li>Toque em <b>Liberar acesso às notificações</b>, encontre <b>Meu Bolso</b> e ative.</li>
+        <li>Se o Android avisar que é uma <b>configuração restrita</b>: toque em <b>Configurações do app</b>, no menu ⋮ e em <b>Permitir configurações restritas</b>. Depois volte e ative o acesso.</li>
+      </ol>
+    </div>
+    <div id="nat-macro" hidden>
+      <p class="hint">O Android bloqueia apps instalados fora da Play Store que leem notificações. Por isso o registro automático usa o <b>MacroDroid</b> (grátis na Play Store): ele lê as notificações e repassa para o Meu Bolso, sem abrir o app. Na próxima vez que você abrir o Meu Bolso, tudo já está registrado.</p>
+      <ol class="bullets">
+        <li>Instale o <b>MacroDroid</b> pela Play Store e crie uma <b>macro</b>.</li>
+        <li><b>Gatilho:</b> Notificação → <i>Notificação recebida</i>. Escolha os apps (Mercado Pago, 99, seu banco...) e, em texto, <i>contém</i> <code>R$</code>. Permita o acesso às notificações quando o MacroDroid pedir.</li>
+        <li><b>Ação:</b> <i>Enviar intent</i> (Send Intent), com destino <b>Broadcast</b>:
+          <div class="copy-list">
+            ${[['Ação', 'br.com.meubolso.app.REGISTRAR'], ['Pacote', 'br.com.meubolso.app'], ['Nome do extra', 'texto'], ['Valor do extra', '[not_app_name] [not_title] [notification]']].map(
+              ([k, v]) => html`<div class="copy-row"><span>${k}</span><code>${v}</code><button type="button" class="btn ghost sm" data-copy="${v}">${icon('copy')} Copiar</button></div>`,
+            )}
+          </div>
+        </li>
+        <li>Salve a macro. Para testar, faça um Pix pequeno e abra o Meu Bolso.</li>
+      </ol>
+    </div>
+    <p class="hint">Também dá para usar <b>Compartilhar → Meu Bolso</b> em prints, textos, PDF de fatura, CSV, OFX e planilhas.</p>
     <label class="check"><input type="checkbox" id="auto-reg" ${st.autoRegister !== false ? 'checked' : ''}> <span>Registrar sozinho (repetidos sempre pedem confirmação)</span></label>
   </section>`;
 }
@@ -72,7 +89,7 @@ export default {
         <ol class="bullets">
           <li><b>Print ou texto:</b> em Início → <b>Notificações</b>, envie um print da central de notificações ou da tela "Atividade" do app. Várias movimentações de uma vez.</li>
           <li><b>Compartilhar (Android):</b> com o app instalado na tela inicial, toque em Compartilhar num print ou texto e escolha <b>Meu Bolso</b>.</li>
-          <li><b>Automático (Android):</b> no app <b>MacroDroid</b> (gratuito), crie a macro: gatilho <i>Notificação recebida</i> dos apps Mercado Pago, 99, 99Pay e seu banco, com texto contendo "R$"; ação <i>Abrir site</i> com o endereço abaixo seguido do texto da notificação ({not_title} {notification}).</li>
+          <li><b>Automático (Android):</b> no app <b>MacroDroid</b> (gratuito), crie a macro: gatilho <i>Notificação recebida</i> dos apps Mercado Pago, 99, 99Pay e seu banco, com texto contendo "R$"; ação <i>Abrir site</i> com o endereço abaixo seguido do texto da notificação ([not_app_name] [not_title] [notification]).</li>
           <li><b>iPhone:</b> o iOS não deixa outros apps lerem notificações. Use o print ou copie o texto.</li>
         </ol>
         ${window.claude
@@ -107,17 +124,32 @@ export default {
       toast('Ajustes salvos');
     });
     if (nativeReader) {
-      const showAccess = () =>
-        notificationAccess().then((on) => {
-          const el = root.querySelector('#nat-status');
-          if (!el) return;
-          el.className = `status ${on ? 'info' : 'error'}`;
-          el.textContent = on ? 'Acesso liberado: as notificações estão sendo registradas.' : 'Acesso ainda não liberado.';
-        });
-      showAccess();
-      document.addEventListener('visibilitychange', showAccess, { once: true });
-      root.querySelector('#nat-open').addEventListener('click', () => nativeReader.openSettings());
-      root.querySelector('#nat-info').addEventListener('click', () => nativeReader.openAppInfo());
+      const status = root.querySelector('#nat-status');
+      nativeFeatures().then(({ listener }) => {
+        root.querySelector(listener ? '#nat-listener' : '#nat-macro').hidden = false;
+        if (!listener) {
+          status.className = 'status info';
+          status.textContent = 'Registro automático pelo MacroDroid: configure uma vez seguindo os passos abaixo.';
+          return;
+        }
+        const showAccess = () =>
+          notificationAccess().then((on) => {
+            status.className = `status ${on ? 'info' : 'error'}`;
+            status.textContent = on ? 'Acesso liberado: as notificações estão sendo registradas.' : 'Acesso ainda não liberado.';
+          });
+        showAccess();
+        document.addEventListener('visibilitychange', showAccess, { once: true });
+        root.querySelector('#nat-open').addEventListener('click', () => nativeReader.openSettings());
+        root.querySelector('#nat-info').addEventListener('click', () => nativeReader.openAppInfo());
+      });
+      root.querySelectorAll('[data-copy]').forEach((b) =>
+        b.addEventListener('click', () => {
+          const v = b.dataset.copy;
+          const fallback = () => toast(`Copie: ${v}`);
+          if (!navigator.clipboard) return fallback();
+          navigator.clipboard.writeText(v).then(() => toast('Copiado'), fallback);
+        }),
+      );
     }
     root.querySelector('#auto-reg').addEventListener('change', (e) => {
       updateSettings({ autoRegister: e.target.checked });

@@ -58,3 +58,13 @@ export async function notificationAccess() {
     return false;
   }
 }
+
+/** Recursos da variante instalada: { listener } = lê notificações por conta própria (variante "completo"). */
+export async function nativeFeatures() {
+  if (!nativeReader) return { listener: false };
+  try {
+    return await nativeReader.features();
+  } catch {
+    return { listener: false };
+  }
+}

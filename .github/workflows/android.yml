@@ -41,30 +41,44 @@ jobs:
             exit 1
           fi
           openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in android/keystore/meubolso.jks.enc -out android/keystore/meubolso.jks -pass env:ANDROID_KEYSTORE_PASSWORD
-      - run: ./gradlew assembleRelease --no-daemon
+      - run: ./gradlew assembleLeveRelease assembleCompletoRelease --no-daemon
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      - name: Nome do arquivo com a versão
+      - name: Nome dos arquivos com a versão
         id: apk
         run: |
           VERSION=$(grep -oP 'versionName "\K[^"]+' android/app/build.gradle)
-          cp android/app/build/outputs/apk/release/app-release.apk "meu-bolso-$VERSION.apk"
+          cp android/app/build/outputs/apk/leve/release/app-leve-release.apk "meu-bolso-$VERSION.apk"
+          cp android/app/build/outputs/apk/completo/release/app-completo-release.apk "meu-bolso-$VERSION-completo.apk"
           echo "file=meu-bolso-$VERSION.apk" >> "$GITHUB_OUTPUT"
+          echo "full=meu-bolso-$VERSION-completo.apk" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: meu-bolso-apk
-          path: ${{ steps.apk.outputs.file }}
+          path: |
+            ${{ steps.apk.outputs.file }}
+            ${{ steps.apk.outputs.full }}
       - name: Conferir assinatura
-        run: $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner verify --print-certs "${{ steps.apk.outputs.file }}"
+        run: |
+          SIGNER=$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner
+          $SIGNER verify --print-certs "${{ steps.apk.outputs.file }}"
+          $SIGNER verify --print-certs "${{ steps.apk.outputs.full }}"
       - name: Publicar em Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-v${{ steps.apk.outputs.version }}-${{ github.run_number }}
           name: Meu Bolso ${{ steps.apk.outputs.version }} (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
-          files: ${{ steps.apk.outputs.file }}
+          files: |
+            ${{ steps.apk.outputs.file }}
+            ${{ steps.apk.outputs.full }}
           body: |
-            APK gerado automaticamente a partir de ${{ github.ref_name }} (${{ github.sha }}).
-            No celular: baixe o arquivo .apk abaixo, abra e permita instalar apps desta fonte.
+            **Baixe o `${{ steps.apk.outputs.file }}`** no celular, abra e permita instalar apps desta fonte.
+            O registro automático das notificações é feito com o MacroDroid (passo a passo em Ajustes no app).
+
+            `${{ steps.apk.outputs.full }}` lê as notificações sozinho, mas o Play Protect bloqueia a instalação
+            dele quando baixado da internet no Brasil. Use só se for instalar pelo computador (adb).
+
+            Gerado a partir de ${{ github.ref_name }} (${{ github.sha }}).

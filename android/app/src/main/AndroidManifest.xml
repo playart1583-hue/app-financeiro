@@ -39,16 +39,16 @@
 
         </activity>
 
-        <!-- Leitura das notificações de bancos e carteiras (a pessoa libera em Configurações > Acesso a notificações) -->
-        <service
-            android:name=".NotificationReaderService"
-            android:label="@string/app_name"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+        <!-- Registro vindo de automações (MacroDroid, Tasker): broadcast br.com.meubolso.app.REGISTRAR com o extra "texto".
+             Fica na fila e é registrado ao abrir o app, sem precisar de acesso às notificações. -->
+        <receiver
+            android:name=".AutomationReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
+                <action android:name="br.com.meubolso.app.REGISTRAR" />
             </intent-filter>
-        </service>
+        </receiver>
+
 
         <provider
             android:name="androidx.core.content.FileProvider"

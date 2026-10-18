@@ -565,3 +565,8 @@ p.pill { white-space: normal; display: inline; line-height: 1.6; }
 .sheet { overflow-x: hidden; }
 .sheet-body { min-width: 0; }
 .rv-row, .rv-list, #f-review form { min-width: 0; }
+
+.copy-list { display: grid; gap: 6px; margin-top: 8px; }
+.copy-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.copy-row span { grid-column: 1 / -1; font-size: 12px; color: var(--muted); font-weight: 700; }
+.copy-row code { font-size: 13px; overflow-wrap: anywhere; min-width: 0; }

@@ -2,6 +2,7 @@ package br.com.meubolso.app;
 
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.OpenableColumns;
@@ -57,6 +58,21 @@ public class NotificationReaderPlugin extends Plugin {
 
     static boolean isShare(Intent intent) {
         return intent != null && (Intent.ACTION_SEND.equals(intent.getAction()) || Intent.ACTION_SEND_MULTIPLE.equals(intent.getAction()));
+    }
+
+    /** A variante instalada tem a leitura própria das notificações? (só a "completo") */
+    @PluginMethod
+    public void features(PluginCall call) {
+        boolean listener;
+        try {
+            getContext().getPackageManager().getServiceInfo(new ComponentName(getContext(), NotificationReaderService.class), 0);
+            listener = true;
+        } catch (PackageManager.NameNotFoundException e) {
+            listener = false;
+        }
+        JSObject ret = new JSObject();
+        ret.put("listener", listener);
+        call.resolve(ret);
     }
 
     @PluginMethod

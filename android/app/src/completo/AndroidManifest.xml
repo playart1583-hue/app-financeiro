@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Variante "completo": o próprio app lê as notificações. No Brasil, o Play Protect bloqueia a instalação
+     de APKs baixados da internet que pedem esse acesso; por isso a variante padrão ("leve") não o declara. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Leitura das notificações de bancos e carteiras (a pessoa libera em Configurações > Acesso a notificações) -->
+        <service
+            android:name=".NotificationReaderService"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
