@@ -547,4 +547,20 @@ table.compare td:first-child { white-space: normal; }
 .mini-kv dd { margin: 0; font: 800 13px var(--font-num); font-variant-numeric: tabular-nums; }
 .import-row.dup { opacity: 0.75; }
 .import-row b.income { color: var(--income); }
-.quick { grid-template-columns: repeat(8, minmax(64px, 1fr)); }
+.quick { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(68px, 1fr); }
+
+/* ---------- Importar arquivo ---------- */
+.rv-list { display: grid; gap: 6px; }
+.rv-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.rv-row.off { opacity: 0.55; }
+.rv-row > input[type='checkbox'] { width: 20px; height: 20px; margin-top: 10px; accent-color: var(--brand); }
+.rv-main { display: grid; gap: 6px; min-width: 0; }
+.rv-main input, .rv-main select { min-height: 38px !important; padding: 6px 10px !important; background: var(--surface) !important; font-size: 14px; }
+.rv-meta { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.rv-val { font: 800 14px var(--font-num); white-space: nowrap; margin-top: 10px; font-variant-numeric: tabular-nums; }
+.rv-val.income { color: var(--income); }
+.page-head .head-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+p.pill { white-space: normal; display: inline; line-height: 1.6; }
+.sheet { overflow-x: hidden; }
+.sheet-body { min-width: 0; }
+.rv-row, .rv-list, #f-review form { min-width: 0; }

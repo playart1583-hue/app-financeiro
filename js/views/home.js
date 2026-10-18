@@ -9,6 +9,7 @@ import { insightCard } from './dicas.js';
 import { openPrintSheet, openTxForm, quickPreview, quickSave } from './form.js';
 import { openLoanContract } from './emprestimo.js';
 import { openNotificationsImport } from './importar.js';
+import { openFileImport } from './arquivo.js';
 
 export default {
   id: 'inicio',
@@ -51,6 +52,8 @@ export default {
       <button type="button" data-act="new-income"><span class="q-ic">${icon('plus')}</span>Ganho</button>
       <button type="button" data-act="print"><span class="q-ic">${icon('camera')}</span>Ler print</button>
       <button type="button" data-act="notifications"><span class="q-ic">${icon('bell')}</span>Notificações</button>
+      <button type="button" data-act="invoice"><span class="q-ic">${icon('card')}</span>Fatura</button>
+      <button type="button" data-act="file"><span class="q-ic">${icon('upload')}</span>Arquivo</button>
       <button type="button" data-go="pix"><span class="q-ic">${icon('pix')}</span>Pix parcelado</button>
       <button type="button" data-act="contract"><span class="q-ic">${icon('calc')}</span>Empréstimo</button>
       <button type="button" data-go="cofrinhos"><span class="q-ic">${icon('piggy')}</span>Cofrinho</button>
@@ -124,6 +127,8 @@ export default {
       if (act === 'print') openPrintSheet();
       if (act === 'notifications') openNotificationsImport();
       if (act === 'contract') openLoanContract();
+      if (act === 'invoice') openFileImport({ mode: 'fatura' });
+      if (act === 'file') openFileImport();
     });
   },
 };

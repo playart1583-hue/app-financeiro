@@ -3,6 +3,7 @@ import { PAYMENT_METHODS, getCategory, normalize } from '../categories.js';
 import { toISO } from '../parser.js';
 import { dayLabel, emptyState, html, icon, money, monthName } from '../ui.js';
 import { openTxForm } from './form.js';
+import { openFileImport } from './arquivo.js';
 
 export function txRow(t, compact = false) {
   const c = getCategory(t.category);
@@ -40,7 +41,9 @@ export default {
     for (const t of txs) (days.get(t.date) || days.set(t.date, []).get(t.date)).push(t);
     const todayISO = toISO(new Date());
     return html`
-      <header class="page-head"><h1>Extrato</h1></header>
+      <header class="page-head"><h1>Extrato</h1>
+        <div class="head-actions"><button type="button" class="btn sm" data-import="extrato">${icon('upload')} Importar arquivo</button><button type="button" class="btn sm" data-import="fatura">${icon('card')} Importar fatura</button></div>
+      </header>
       ${monthNav(ui.month)}
       <div class="summary3">
         <div><small>Receitas</small><b class="income">${money(sum.income)}</b></div>
@@ -66,6 +69,10 @@ export default {
     q.addEventListener('input', () => {
       ui.query = q.value;
       rerender({ keepFocus: '#ex-q' });
+    });
+    root.addEventListener('click', (e) => {
+      const m = e.target.closest('[data-import]')?.dataset.import;
+      if (m) openFileImport({ mode: m });
     });
     root.addEventListener('change', (e) => {
       if (e.target.name === 'ex-f') {

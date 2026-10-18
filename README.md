@@ -23,6 +23,8 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 | **Contrato de empréstimo por print**: lê valor liberado, valor financiado, parcelas, taxa, CET, IOF, tarifas e seguro; mostra o custo real, **o que melhora, o que piora e o impacto no dia a dia** (sobra mensal antes × depois, % da renda comprometida, metas que atrasam) antes de você contratar; pode quitar dívidas caras com o dinheiro | Início → *Empréstimo* · Planejar · Dívidas |
 | **Encerre primeiro**: ranking de Pix parcelados, parcelamentos com juros e empréstimos do mais caro para o mais barato, com valor para quitar hoje e juros economizados (desconto obrigatório na quitação antecipada, CDC art. 52) | Dívidas e Dicas |
 | **Notificações do Mercado Pago, 99, 99Pay e bancos**: várias de uma vez por print ou texto, com aviso de lançamento repetido | Início → *Notificações* |
+| **Importar arquivos** de bancos e outros apps: CSV, TSV, TXT, **OFX**, Excel (XLSX/XLS/ODS), JSON e PDF de extrato. Reconhece Nubank, Inter, Mercado Pago, Mobills/Organizze e planilhas genéricas; você ajusta as colunas, revê categorias e os repetidos ficam desmarcados | Extrato → *Importar arquivo* · Início → *Arquivo* |
+| **Importar a fatura do cartão** (PDF, prints das páginas, CSV ou OFX): lê cartão, vencimento e total, ignora o pagamento da fatura, marca estornos e juros/IOF, detecta parcelas ("3/10") e cria as parcelas futuras; confere a soma com o total da fatura | Extrato → *Importar fatura* · Início → *Fatura* |
 | **Registro automático** (Android): compartilhe um print/texto para o app instalado, ou use uma automação (MacroDroid) que abre `…/?registrar=<texto da notificação>` | Ajustes → Mercado Pago, 99 e notificações |
 | Cofrinhos (metas) com quanto guardar por mês até o prazo e rendimento estimado | Planejar → Cofrinhos |
 | Orçamento por categoria com alertas em 80% e 100% | Planejar → Orçamentos |
@@ -55,6 +57,12 @@ A leitura tenta, nesta ordem:
 3. **OCR no aparelho** (Tesseract.js) + interpretação por regras em `js/parser.js`: funciona sem conta, com menos precisão.
 
 Também é possível colar o texto de uma notificação ou comprovante.
+
+## Importar de outros apps e da fatura
+
+Formatos aceitos: **CSV/TSV/TXT** (vírgula, ponto e vírgula, tab; UTF-8 ou Windows-1252), **OFX/QFX**, **XLSX/XLS/ODS** (via SheetJS), **JSON** (backup deste app — juntar ou substituir — ou lista de outro app), **PDF** (texto extraído com pdf.js) e **imagens**. Quando o formato não é reconhecido, o texto é organizado pelo Claude (no app da Claude ou com a chave da API).
+
+Na fatura, o pagamento da fatura anterior vem desmarcado (para não contar o gasto duas vezes), estornos entram como reembolso e juros/IOF/anuidade como "Impostos e taxas". Compras parceladas importam a parcela do mês e, se você quiser, as próximas — numa fatura seguinte, as parcelas que já existem aparecem como repetidas.
 
 ## Mercado Pago e 99
 

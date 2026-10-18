@@ -1,10 +1,10 @@
 // Cache simples para o app abrir sem internet depois da primeira visita.
-const CACHE = 'meubolso-v2';
+const CACHE = 'meubolso-v3';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './icons/icon.svg', './css/app.css',
   './js/main.js', './js/store.js', './js/ui.js', './js/finance.js', './js/analytics.js', './js/insights.js',
   './js/parser.js', './js/categories.js', './js/receipt.js', './js/demo.js', './js/impact.js',
-  './js/views/reader.js', './js/views/emprestimo.js', './js/views/importar.js',
+  './js/views/reader.js', './js/views/emprestimo.js', './js/views/importar.js', './js/views/arquivo.js', './js/importers.js',
   './js/views/home.js', './js/views/extrato.js', './js/views/relatorios.js', './js/views/planejar.js', './js/views/dicas.js',
   './js/views/cofrinhos.js', './js/views/dividas.js', './js/views/pix.js', './js/views/orcamentos.js', './js/views/ajustes.js', './js/views/form.js',
 ];
@@ -24,8 +24,8 @@ async function receiveShare(request) {
   const cache = await caches.open('meubolso-share');
   const text = [form.get('title'), form.get('text'), form.get('url')].filter(Boolean).join('\n');
   if (text) await cache.put('share/text', new Response(text));
-  const file = form.getAll('files').find((f) => f && f.type && f.type.startsWith('image/'));
-  if (file) await cache.put('share/file', new Response(file, { headers: { 'content-type': file.type, 'x-name': file.name || 'print.jpg' } }));
+  const file = form.getAll('files').find((f) => f && f.size);
+  if (file) await cache.put('share/file', new Response(file, { headers: { 'content-type': file.type || 'application/octet-stream', 'x-name': encodeURIComponent(file.name || 'arquivo') } }));
   return Response.redirect('./?compartilhado=1', 303);
 }
 

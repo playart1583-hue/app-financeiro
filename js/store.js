@@ -145,6 +145,48 @@ export function addTransaction(draft) {
   return ids;
 }
 
+/**
+ * Importação em lote (um único salvamento). Cada rascunho pode trazer `installment: {i, n}` (parcela de fatura):
+ * com `futureInstallments`, cria também as parcelas seguintes para entrarem nas projeções.
+ */
+export function addTransactions(drafts, { futureInstallments = true } = {}) {
+  const ids = [];
+  commit((s) => {
+    for (const d of drafts) {
+      const base = {
+        type: d.type,
+        description: d.description?.trim() || '',
+        category: d.category,
+        classification: d.type === 'expense' ? d.classification || defaultClassification(d.category) : null,
+        time: d.time || '',
+        method: d.method || 'pix',
+        card: d.card || '',
+        merchant: d.merchant || '',
+        location: '',
+        source: d.source || 'importacao',
+        ...(d.fitid ? { fitid: d.fitid } : {}),
+        createdAt: Date.now(),
+      };
+      const amount = round2(d.amount);
+      if (d.installment && d.installment.n > 1) {
+        const groupId = uid();
+        const { i, n } = d.installment;
+        const last = futureInstallments ? n : i;
+        for (let k = i; k <= last; k++) {
+          const id = uid();
+          ids.push(id);
+          s.transactions.push({ ...base, id, amount, date: addMonthsISO(d.date, k - i), installment: { i: k, n, groupId, cash: round2(amount * n) } });
+        }
+      } else {
+        const id = uid();
+        ids.push(id);
+        s.transactions.push({ ...base, id, amount, date: d.date });
+      }
+    }
+  });
+  return ids;
+}
+
 export function updateTransaction(id, patch, { wholeGroup = false } = {}) {
   commit((s) => {
     const t = s.transactions.find((x) => x.id === id);
@@ -178,6 +220,11 @@ export function deleteTransaction(id, { wholeGroup = false, futureOnly = false }
     s.transactions = s.transactions.filter((x) => !del(x));
   });
   return removed;
+}
+
+export function deleteTransactions(ids) {
+  const set = new Set(ids);
+  commit((s) => (s.transactions = s.transactions.filter((t) => !set.has(t.id))));
 }
 
 export function restoreTransactions(list) {
@@ -342,6 +389,11 @@ export function payoffInstallments(groupId, amount, date = toISO(new Date())) {
 export function findDuplicate(draft) {
   const d = new Date((draft.date || toISO(new Date())) + 'T12:00:00');
   return state.transactions.find((t) => {
+    if (draft.fitid && t.fitid) return draft.fitid === t.fitid;
+    // parcela de fatura que já foi criada como "parcela futura" numa importação anterior
+    if (draft.installment && t.installment && t.installment.i === draft.installment.i && t.installment.n === draft.installment.n && Math.abs(t.amount - draft.amount) < 0.01) {
+      return Math.abs(new Date(t.date + 'T12:00:00') - d) / 86400000 <= 45;
+    }
     if (t.type !== draft.type || Math.abs(t.amount - draft.amount) > 0.009) return false;
     const diff = Math.abs(new Date(t.date + 'T12:00:00') - d) / 86400000;
     if (diff > 1) return false;
@@ -372,6 +424,21 @@ export function updateSettings(patch) {
 
 export function exportJSON() {
   return JSON.stringify(state, null, 2);
+}
+
+/** Junta um backup com os dados atuais (sem duplicar pelo id). Retorna quantos lançamentos entraram. */
+export function mergeBackup(data) {
+  let added = 0;
+  commit((s) => {
+    const has = new Set(s.transactions.map((t) => t.id));
+    for (const t of data.transactions || []) if (!has.has(t.id)) s.transactions.push(t), added++;
+    for (const key of ['goals', 'loans']) {
+      const ids = new Set(s[key].map((x) => x.id));
+      for (const x of data[key] || []) if (!ids.has(x.id)) s[key].push(x);
+    }
+    s.budgets = { ...(data.budgets || {}), ...s.budgets };
+  });
+  return added;
 }
 
 export function importJSON(text) {

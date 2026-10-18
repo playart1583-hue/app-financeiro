@@ -1,6 +1,7 @@
 // Leitura de prints: compra/pagamento (onde, quando, horário, cartão, parcelas, valor) e lista de dívidas do Serasa.
 // Motores, na ordem: Claude dentro do app da Claude (Artifact) → Claude API com chave própria → OCR no aparelho.
 import { parseLoanText, parseNotifications, parseReceiptText, parseSerasaText, toISO } from './parser.js';
+import { parseStatementText } from './importers.js';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, CLASSIFICATIONS, categorize, defaultClassification } from './categories.js';
 import { getApiKey } from './store.js';
 
@@ -42,7 +43,8 @@ const blobToBase64 = (blob) =>
   });
 
 let samplePromise = null;
-async function getSample() {
+/** Claude dentro do app da Claude: { sample, images } ou null fora dele. */
+function getSampleInfo() {
   if (!samplePromise) {
     samplePromise = (async () => {
       const c = typeof window !== 'undefined' ? window.claude : null;
@@ -50,11 +52,15 @@ async function getSample() {
       const sample = await c.use('sample');
       if (!sample) return null;
       const limits = await sample.limits().catch(() => null);
-      return limits?.images ? sample : null;
+      return { sample, images: Boolean(limits?.images) };
     })();
   }
   return samplePromise;
 }
+const getSample = async () => {
+  const info = await getSampleInfo();
+  return info?.images ? info.sample : null;
+};
 
 /** Qual motor vai ler o print agora. */
 export async function currentEngine() {
@@ -275,6 +281,116 @@ export async function analyzeLoanContract(file, opts = {}) {
   return { data: r.json ? normalizeClaudeLoan(r.json) : { ...parseLoanText(r.text), rawText: r.text }, engine: r.engine };
 }
 
+// ---------- Extratos e faturas (PDF, texto, prints de várias páginas) ----------
+
+const STATEMENT_TYPES = ['gasto', 'ganho', 'pagamento', 'estorno', 'encargo'];
+const statementGuide = `Devolva SOMENTE um JSON com:
+- "banco": banco/emissor ou app de origem, ou null
+- "cartao_final": 4 últimos dígitos do cartão, ou null
+- "vencimento": vencimento da fatura AAAA-MM-DD, ou null (se for extrato de conta, null)
+- "total": total da fatura, ou null
+- "movimentos": lista, um item por lançamento, com:
+  - "data": AAAA-MM-DD (em fatura sem ano, use o ano coerente com o vencimento)
+  - "descricao": como aparece, sem o trecho da parcela
+  - "valor": valor positivo em reais
+  - "tipo": gasto, ganho, pagamento (pagamento da própria fatura), estorno (crédito/devolução) ou encargo (juros, IOF, multa, anuidade)
+  - "parcela_atual" e "parcelas_total": para compras parceladas ("3/10" = 3 e 10), senão null
+  - "categoria": um id de ${[...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].map((c) => c.id).join(', ')}
+Ignore linhas de saldo, totais, limites e propaganda.`;
+
+const STATEMENT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['banco', 'cartao_final', 'vencimento', 'total', 'movimentos'],
+  properties: {
+    banco: nullable('string'),
+    cartao_final: nullable('string'),
+    vencimento: nullable('string'),
+    total: nullable('number'),
+    movimentos: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['data', 'descricao', 'valor', 'tipo', 'parcela_atual', 'parcelas_total', 'categoria'],
+        properties: {
+          data: { type: 'string' },
+          descricao: { type: 'string' },
+          valor: { type: 'number' },
+          tipo: { type: 'string', enum: STATEMENT_TYPES },
+          parcela_atual: nullable('integer'),
+          parcelas_total: nullable('integer'),
+          categoria: { type: 'string', enum: [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].map((c) => c.id) },
+        },
+      },
+    },
+  },
+};
+
+export function normalizeStatement(j) {
+  const ids = (type) => (type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map((c) => c.id);
+  const movements = (j?.movimentos || [])
+    .filter((m) => m && /^\d{4}-\d{2}-\d{2}$/.test(m.data) && Math.abs(+m.valor) > 0)
+    .map((m) => {
+      const type = ['ganho', 'estorno', 'pagamento'].includes(m.tipo) ? 'income' : 'expense';
+      const kind = { gasto: 'compra', ganho: 'compra', pagamento: 'pagamento', estorno: 'estorno', encargo: 'encargo' }[m.tipo] || 'compra';
+      const n = +m.parcelas_total;
+      const i = +m.parcela_atual;
+      const category = kind === 'encargo' ? 'impostos' : kind === 'estorno' ? 'reembolso' : ids(type).includes(m.categoria) ? m.categoria : categorize(m.descricao, type) || (type === 'income' ? 'outros-ganhos' : 'outros');
+      return { date: m.data, time: '', description: String(m.descricao || '').trim(), amount: Math.abs(+m.valor), type, kind, installment: n > 1 && i >= 1 && i <= n ? { i, n } : null, category };
+    });
+  return {
+    movements,
+    dueDate: /^\d{4}-\d{2}-\d{2}$/.test(j?.vencimento || '') ? j.vencimento : null,
+    total: +j?.total || null,
+    card: j?.banco || j?.cartao_final ? { bank: j.banco || null, last4: j.cartao_final || null, brand: null } : null,
+    isInvoice: Boolean(j?.vencimento),
+  };
+}
+
+/** O Claude está disponível para organizar texto? (sem imagem) */
+export async function canStructureText() {
+  return Boolean((await getSampleInfo())?.sample || getApiKey());
+}
+
+/** Pede ao Claude para organizar o texto de um extrato ou fatura em lançamentos. */
+export async function structureText(text, { invoice = false, signal } = {}) {
+  const today = toISO(new Date());
+  const body = String(text).slice(0, 60000);
+  const prompt = `Abaixo está o texto de ${invoice ? 'uma fatura de cartão de crédito' : 'um extrato bancário ou exportação de outro app de finanças'} (pode ter vindo de um PDF, com colunas desalinhadas). Hoje é ${today}.\n${statementGuide}\n\n--- TEXTO ---\n${body}`;
+  const info = await getSampleInfo();
+  if (info?.sample) {
+    try {
+      return normalizeStatement(await info.sample.json(prompt, { signal, cache: false }));
+    } catch (e) {
+      if (e?.code === 'cancelled') throw e;
+      if (!NO_CLAUDE.includes(e?.code)) throw new Error(sampleErrorText(e));
+    }
+  }
+  if (getApiKey()) return normalizeStatement(await callClaudeApi(null, prompt, STATEMENT_SCHEMA, signal));
+  throw new Error('Para organizar esse texto com o Claude, abra o app dentro da Claude ou cadastre uma chave em Ajustes.');
+}
+
+/** Prints de fatura/extrato (uma ou várias páginas). */
+export async function analyzeStatementImages(files, { invoice = false, signal, onStatus = () => {} } = {}) {
+  const today = toISO(new Date());
+  const all = { movements: [], dueDate: null, total: null, card: null, isInvoice: invoice };
+  let engine = null;
+  for (let k = 0; k < files.length; k++) {
+    onStatus(`Lendo página ${k + 1} de ${files.length}…`);
+    const prompt = `Este print é ${files.length > 1 ? `a página ${k + 1} de ${files.length} de ` : ''}${invoice ? 'uma fatura de cartão de crédito' : 'um extrato ou lista de movimentações'}. Hoje é ${today}.\n${statementGuide}`;
+    const r = await readImage(files[k], { maxSide: 2200, prompt, schema: STATEMENT_SCHEMA, signal, onStatus });
+    engine = r.engine;
+    const part = r.json ? normalizeStatement(r.json) : parseStatementText(r.text, { invoice: invoice || null });
+    all.movements.push(...part.movements);
+    all.dueDate = all.dueDate || part.dueDate;
+    all.total = all.total || part.total;
+    all.card = all.card || part.card;
+    all.isInvoice = all.isInvoice || part.isInvoice;
+  }
+  return { ...all, engine };
+}
+
 // ---------- Serasa ----------
 
 const serasaPrompt = `Este é um print do Serasa Limpa Nome (ou de outro site de negociação de dívidas) mostrando dívidas no CPF da pessoa.
@@ -347,10 +463,11 @@ function sampleErrorText(e) {
   }
 }
 
+/** Chama a API com uma imagem (blob) ou só texto (blob null). */
 async function callClaudeApi(blob, prompt, schema, signal) {
   const { default: Anthropic } = await import(SDK_URL);
   const client = new Anthropic({ apiKey: getApiKey(), dangerouslyAllowBrowser: true });
-  const data = await blobToBase64(blob);
+  const data = blob ? await blobToBase64(blob) : null;
   let res;
   try {
     res = await client.beta.messages.create(
@@ -363,10 +480,7 @@ async function callClaudeApi(blob, prompt, schema, signal) {
         messages: [
           {
             role: 'user',
-            content: [
-              { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } },
-              { type: 'text', text: prompt },
-            ],
+            content: [...(data ? [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } }] : []), { type: 'text', text: prompt }],
           },
         ],
       },

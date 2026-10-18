@@ -4,6 +4,7 @@ import { cloud, getState, init, subscribe } from './store.js';
 import { closeAllSheets, html, icon } from './ui.js';
 import { openPrintSheet, openTxForm } from './views/form.js';
 import { ingestExternalText, openNotificationsImport } from './views/importar.js';
+import { openFileImport } from './views/arquivo.js';
 import inicio from './views/home.js';
 import extrato from './views/extrato.js';
 import relatorios from './views/relatorios.js';
@@ -132,10 +133,12 @@ async function handleIncoming() {
     const fileRes = await cache.match('share/file');
     const textRes = await cache.match('share/text');
     const sharedText = textRes ? await textRes.text() : '';
-    const file = fileRes ? new File([await fileRes.blob()], fileRes.headers.get('x-name') || 'print.jpg', { type: fileRes.headers.get('content-type') || 'image/jpeg' }) : null;
+    const file = fileRes ? new File([await fileRes.blob()], decodeURIComponent(fileRes.headers.get('x-name') || 'arquivo'), { type: fileRes.headers.get('content-type') || '' }) : null;
     await cache.delete('share/file');
     await cache.delete('share/text');
-    if (file) openNotificationsImport({ file });
+    // print vai para notificações (várias movimentações por imagem); PDF, CSV, OFX etc. para a importação de arquivos
+    if (file && file.type.startsWith('image/')) openNotificationsImport({ file });
+    else if (file) openFileImport({ files: [file], mode: /fatura|invoice/i.test(file.name) ? 'fatura' : 'extrato' });
     else if (sharedText) ingestExternalText(sharedText);
     else openPrintSheet();
   } catch {
