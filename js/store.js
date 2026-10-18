@@ -150,7 +150,8 @@ export function addTransaction(draft) {
     source: draft.source || 'manual',
     ...(draft.last4 ? { last4: draft.last4 } : {}),
     // parcelada com vencimento: cada parcela fica no mês em que vence; a data da compra fica guardada
-    ...(draft.firstDue && n > 1 ? { purchaseDate: draft.date } : {}),
+    // no crédito com vencimento: o lançamento fica no mês em que a fatura vence; a data da compra fica guardada
+    ...(draft.firstDue && draft.firstDue !== draft.date ? { purchaseDate: draft.date } : {}),
     // transferência entre contas suas: aparece no extrato, mas não conta como gasto nem ganho
     ...(draft.internal ? { internal: true } : {}),
     ...(draft.loanId ? { loanId: draft.loanId } : {}),
@@ -176,7 +177,7 @@ export function addTransaction(draft) {
     } else {
       const id = uid();
       ids.push(id);
-      s.transactions.push({ ...base, id, amount: round2(draft.amount), date: draft.date });
+      s.transactions.push({ ...base, id, amount: round2(draft.amount), date: draft.firstDue || draft.date });
     }
   });
   return ids;
@@ -203,7 +204,7 @@ export function addTransactions(drafts, { futureInstallments = true } = {}) {
         source: d.source || 'importacao',
         ...(d.fitid ? { fitid: d.fitid } : {}),
         ...(d.last4 ? { last4: d.last4 } : {}),
-        ...(d.firstDue && d.installment?.n > 1 ? { purchaseDate: d.date } : {}),
+        ...(d.firstDue && d.firstDue !== d.date ? { purchaseDate: d.date } : {}),
         createdAt: Date.now(),
       };
       const amount = round2(d.amount);
@@ -220,7 +221,7 @@ export function addTransactions(drafts, { futureInstallments = true } = {}) {
       } else {
         const id = uid();
         ids.push(id);
-        s.transactions.push({ ...base, id, amount, date: d.date });
+        s.transactions.push({ ...base, id, amount, date: d.firstDue || d.date });
       }
     }
   });

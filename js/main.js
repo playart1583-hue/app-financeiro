@@ -1,7 +1,8 @@
 // Inicialização, navegação entre telas e barra inferior.
 import { keyOf, addMonths } from './analytics.js';
 import { cloud, getState, init, subscribe } from './store.js';
-import { closeAllSheets, closeTopSheet, html, icon } from './ui.js';
+import { closeAllSheets, closeTopSheet, html, icon, toast } from './ui.js';
+import { alignCreditToDue, undoAlign } from './cards.js';
 import { openPrintSheet } from './views/form.js';
 import { openAddMenu } from './views/adicionar.js';
 import { openFileImport, openTextImport } from './views/arquivo.js';
@@ -117,6 +118,13 @@ ui.route = routeFromHash();
 subscribe(() => render());
 cloud.onStatus = () => ui.route === 'ajustes' && render();
 render();
+// compras no crédito que ficaram na data da compra vão para o mês em que a fatura vence
+announceAligned(alignCreditToDue());
+
+export function announceAligned(moved) {
+  if (!moved.length) return;
+  toast(`${moved.length} lançamento${moved.length > 1 ? 's' : ''} no crédito ${moved.length > 1 ? 'foram' : 'foi'} para o mês em que a fatura vence`, { action: 'Desfazer', onAction: () => undoAlign(moved), timeout: 10000 });
+}
 
 // Entrada vinda de fora do app: menu "Compartilhar" do celular envia texto (GET ?text=) ou imagem (POST tratado pelo sw.js -> ?compartilhado=1).
 // Nada é registrado sozinho: tudo abre para você conferir antes de salvar.

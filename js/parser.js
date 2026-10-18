@@ -129,7 +129,11 @@ const BRANDS = ['visa', 'mastercard', 'master', 'elo', 'hipercard', 'amex', 'ame
 /** Encontra informações do cartão: "final 1234", "**** 1234", bandeira, banco. */
 export function findCard(text) {
   const t = normalize(text);
-  const m = t.match(/(?:final|terminad[oa] em|\*{2,}\s?|x{4}\s?|•{2,}\s?)\s*(\d{4})\b/);
+  // "final 8238", "terminado em 8238", "**** 8238", "•••• 8238", "Cartão 8238", "Cartão: 8238", "Visa 8238"
+  const m =
+    t.match(/(?:final|terminad[oa] em|\*{2,}\s?|x{4}\s?|•{2,}\s?|\.{3,}\s?)\s*:?\s*(\d{4})\b/) ||
+    t.match(/\bcart[aã]o(?:\s+(?:de\s+)?(?:credito|debito|virtual|fisico|adicional))?\s*(?:n[ºo°.]*|:|-)?\s*(\d{4})(?![\d.,/:])/) ||
+    t.match(/\b(?:visa|mastercard|master|elo|hipercard|amex)\s*(?:\*+|•+|-|:)?\s*(\d{4})(?![\d.,/:])/);
   const brand = BRANDS.find((b) => new RegExp(`\\b${b}\\b`).test(t));
   const bank = BANKS.find((b) => new RegExp(`\\b${b}\\b`).test(t));
   if (!m && !brand && !bank) return null;

@@ -18,6 +18,8 @@ export function txRow(t, compact = false) {
   const meta = [
     t.time,
     PAYMENT_METHODS[t.method],
+    // no crédito o lançamento fica no mês do vencimento; mostra quando a compra foi feita
+    t.purchaseDate ? `compra ${t.purchaseDate.slice(8)}/${t.purchaseDate.slice(5, 7)}` : null,
     t.installment ? `${t.installment.i}/${t.installment.n}` : null,
     t.recurringId ? 'fixo' : null,
     compact ? dayLabel(t.date, toISO(new Date())) : null,

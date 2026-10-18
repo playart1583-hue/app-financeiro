@@ -1,7 +1,7 @@
 // Formulário de lançamento (gasto/ganho), leitura de print e registro rápido por texto.
 import { addTransaction, deleteTransaction, findDuplicate, getState, restoreTransactions, updateTransaction } from '../store.js';
 import { markOwnTransfer } from '../transfers.js';
-import { cardInfo, cardText, cycleText, dueFor, knownLast4, rememberCard, splitCard } from '../cards.js';
+import { cardInfo, cardText, cycleText, dueFor, findKnownLast4, knownLast4, rememberCard, splitCard } from '../cards.js';
 import { CLASSIFICATIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, categorize, defaultClassification, getCategory } from '../categories.js';
 import { analyzeInstallments } from '../finance.js';
 import { cardLabel, parseQuickEntry, parseReceiptText, toISO } from '../parser.js';
@@ -118,7 +118,7 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           <label class="field"><span>Parcelas</span><input id="f-inst" type="number" name="installments" min="1" max="72" inputmode="numeric" value="${v.installments || 1}"></label>
           <label class="field" id="f-pmt-wrap"><span>Valor da parcela</span><input id="f-pmt" name="installmentValue" inputmode="decimal" placeholder="sem juros" value="${moneyInput(v.installmentValue)}"></label>
         </div>
-        <label class="field" id="f-due-wrap"><span>Vencimento da 1ª parcela</span><input id="f-due" type="date" name="firstDue" value="${v.firstDue || ''}"><small class="hint"><span id="f-cycle"></span>As próximas parcelas entram nos meses seguintes, no mesmo dia.</small></label>
+        <label class="field" id="f-due-wrap"><span id="f-due-label">Vencimento da 1ª parcela</span><input id="f-due" type="date" name="firstDue" value="${v.firstDue || ''}"><small class="hint"><span id="f-cycle"></span><span id="f-due-hint">As próximas parcelas entram nos meses seguintes, no mesmo dia.</span></small></label>
         <div id="f-juros" class="juros" hidden></div>
         <label class="check" id="f-rec-wrap"><input type="checkbox" id="f-rec" name="recurring"> <span>Repetir todo mês (conta fixa, salário)</span></label>`
       : ''}
@@ -156,8 +156,12 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           $('#f-inst-wrap').hidden = !canInstall;
           const n = canInstall ? +val('installments') || 1 : 1;
           $('#f-pmt-wrap').hidden = n <= 1;
-          $('#f-due-wrap').hidden = n <= 1;
-          if (n > 1) autoDue();
+          // crédito (à vista ou parcelado) e parcelados: o lançamento vai para o vencimento da fatura
+          const withDue = canInstall && (n > 1 || method === 'credito');
+          $('#f-due-wrap').hidden = !withDue;
+          $('#f-due-label').textContent = n > 1 ? 'Vencimento da 1ª parcela' : 'Vencimento da fatura';
+          $('#f-due-hint').textContent = n > 1 ? 'As próximas parcelas entram nos meses seguintes, no mesmo dia.' : 'A compra entra no mês em que a fatura vence.';
+          if (withDue) autoDue();
           $('#f-pmt').placeholder = method === 'pix_parcelado' ? 'com juros' : 'sem juros';
           $('#f-rec-wrap').hidden = n > 1;
           renderJuros(n, method);
@@ -317,7 +321,7 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           toast('Lançamento atualizado');
           return;
         }
-        const firstDue = n > 1 ? val('firstDue') || '' : '';
+        const firstDue = !internal && type === 'expense' && (n > 1 || method === 'credito') ? val('firstDue') || '' : '';
         rememberCard(draft.last4, { bank: val('bank')?.trim(), due: firstDue });
         const ids = addTransaction({ ...draft, firstDue, installments: n, installmentValue: n > 1 && pmt > 0 ? pmt : null, recurring: n === 1 && f.querySelector('#f-rec')?.checked, source: extracted ? 'print' : 'manual' });
         sheet.close();
@@ -348,7 +352,7 @@ export function prefillFromExtract(x) {
     time: x.time || '',
     method,
     card: x.card && (x.card.last4 || x.card.brand || x.card.bank) ? cardLabel(x.card) : x.app || '',
-    last4: x.card?.last4 || '',
+    last4: x.card?.last4 || findKnownLast4(x.rawText),
     bank: x.card && (x.card.bank || x.card.brand) ? [x.card.bank, x.card.brand].filter(Boolean).join(' · ') : x.app || '',
     merchant: x.merchant || '',
     location: x.location || '',
@@ -410,7 +414,7 @@ function purchaseMovement(d) {
   const n = d.installments > 1 ? d.installments : 1;
   const value = n > 1 ? d.installmentValue || (d.amount || 0) / n : d.amount || 0;
   const m = finishMovement({ date: d.date || toISO(new Date()), time: d.time || '', description: d.description || d.merchant || 'Compra', signed: d.type === 'income' ? value : -value, type: d.type || 'expense' });
-  return { ...m, amount: Math.round(m.amount * 100) / 100, category: d.category || m.category, method: d.method || (n > 1 ? 'credito' : null), card: d.card && (d.card.last4 || d.card.brand || d.card.bank) ? cardLabel(d.card) : '', last4: d.card?.last4 || '', installment: n > 1 ? { i: 1, n } : m.installment };
+  return { ...m, amount: Math.round(m.amount * 100) / 100, category: d.category || m.category, method: d.method || (n > 1 ? 'credito' : null), card: d.card && (d.card.last4 || d.card.brand || d.card.bank) ? cardLabel(d.card) : '', last4: d.card?.last4 || findKnownLast4(d.rawText), installment: n > 1 ? { i: 1, n } : m.installment };
 }
 
 /** Registro rápido: interpreta o texto e salva na hora. */

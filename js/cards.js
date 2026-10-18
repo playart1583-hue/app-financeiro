@@ -1,7 +1,7 @@
 // Cartões que você usa: final, banco e dia de vencimento da fatura. O app aprende quando você lança uma
 // compra parcelada com vencimento, e nas próximas (à mão, por print ou arquivo) já preenche sozinho.
 import { addMonthsISO } from './analytics.js';
-import { getState, updateSettings } from './store.js';
+import { commit, getState, updateSettings } from './store.js';
 
 const cards = () => getState().settings.cards || {};
 
@@ -24,6 +24,16 @@ export function knownLast4() {
     if (l) set.add(l);
   }
   return [...set].slice(0, 12);
+}
+
+/**
+ * Final de cartão já conhecido que aparece no texto de um print ou arquivo (número de 4 dígitos solto,
+ * que não faz parte de valor, data ou horário). Serve quando o texto não diz "final".
+ */
+export function findKnownLast4(text) {
+  const t = String(text || '');
+  if (!t) return '';
+  return knownLast4().find((l) => new RegExp(`(?<![\\d.,/:])${l}(?![\\d.,/:])`).test(t)) || '';
 }
 
 export const cardInfo = (last4) => (last4 ? cards()[last4] || null : null);
@@ -92,3 +102,57 @@ export function removeCard(last4) {
 }
 
 export const cardList = () => Object.entries(cards()).map(([last4, c]) => ({ last4, ...c }));
+
+/**
+ * Compras no crédito já lançadas na data da compra (antes desta regra, ou antes de cadastrar o cartão):
+ * passam para o mês em que a fatura vence, pelo fechamento e vencimento do cartão. Parcelas: a k-ésima
+ * vence k-1 meses depois da primeira. Retorna o que mudou, para poder desfazer.
+ */
+export function alignCreditToDue() {
+  const moved = [];
+  const groups = new Map();
+  for (const t of getState().transactions) {
+    if (t.type !== 'expense' || t.method !== 'credito' || t.purchaseDate || t.internal) continue;
+    const info = cardInfo(t.last4 || splitCard(t.card).last4);
+    if (!info?.dueDay) continue;
+    if (t.installment?.groupId) (groups.get(t.installment.groupId) || groups.set(t.installment.groupId, []).get(t.installment.groupId)).push([t, info]);
+    else {
+      const due = dueFor(t.date, info);
+      if (due && due !== t.date) moved.push({ id: t.id, from: t.date, to: due });
+    }
+  }
+  for (const list of groups.values()) {
+    list.sort((a, b) => a[0].installment.i - b[0].installment.i);
+    const [first, info] = list[0];
+    // a parcela de menor número ficou na data da compra (à mão: a 1ª; fatura: a parcela daquele mês)
+    const due1 = dueFor(first.date, info);
+    if (!due1) continue;
+    for (const [t] of list) {
+      const to = addMonthsISO(due1, t.installment.i - 1);
+      if (to !== t.date) moved.push({ id: t.id, from: t.date, to, purchase: first.date });
+    }
+  }
+  if (!moved.length) return [];
+  const byId = new Map(moved.map((m) => [m.id, m]));
+  commit((s) => {
+    for (const t of s.transactions) {
+      const m = byId.get(t.id);
+      if (m) Object.assign(t, { date: m.to, purchaseDate: m.purchase || m.from });
+    }
+  });
+  return moved;
+}
+
+/** Desfaz o alinhamento acima. */
+export function undoAlign(moved) {
+  const byId = new Map(moved.map((m) => [m.id, m]));
+  commit((s) => {
+    for (const t of s.transactions) {
+      const m = byId.get(t.id);
+      if (m) {
+        t.date = m.from;
+        delete t.purchaseDate;
+      }
+    }
+  });
+}

@@ -367,6 +367,8 @@ export async function analyzeStatementImages(files, { invoice = false, signal, o
     all.total = all.total || part.total;
     all.card = all.card || part.card;
     all.isInvoice = all.isInvoice || part.isInvoice;
+    // texto lido: serve para achar o final de um cartão cadastrado quando o print não diz "final"
+    all.rawText = `${all.rawText || ''}\n${r.text || ''}`;
   }
   return { ...all, engine };
 }

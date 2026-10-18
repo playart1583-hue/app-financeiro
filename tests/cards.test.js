@@ -29,3 +29,10 @@ test('com o fechamento: antes fica na fatura aberta, no dia ou depois vai para a
   assert.equal(nextDue('2026-02-27', 8, 31), '2026-03-08');
   assert.equal(nextDue('2026-02-28', 8, 31), '2026-04-08');
 });
+
+test('reconhece o final do cartão em formatos diferentes', async () => {
+  const { findCard } = await import('../js/parser.js');
+  for (const t of ['Compra aprovada no cartão final 8238', 'Cartão de crédito 8238 R$ 50,00', 'Cartão: 8238', 'VISA •••• 8238', 'Mastercard ****8238'])
+    assert.equal(findCard(t)?.last4, '8238', t);
+  assert.equal(findCard('Total R$ 1.234,56 em 10/10/2026')?.last4 ?? null, null);
+});

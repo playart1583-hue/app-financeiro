@@ -5,7 +5,7 @@ import { cloud, exportJSON, getApiKey, importJSON, loadDemo, resetAll, setApiKey
 import { html, icon, pct, toast } from '../ui.js';
 import { isNativeApp, nativeBridge } from '../native.js';
 import { confirmIdentity, lockStatus } from '../lock.js';
-import { cardList, cycleText, removeCard, saveCard } from '../cards.js';
+import { alignCreditToDue, cardList, cycleText, removeCard, saveCard, undoAlign } from '../cards.js';
 
 const SYNC = {
   local: 'Os dados ficam só neste aparelho. Faça backup de vez em quando.',
@@ -130,7 +130,8 @@ export default {
     cardf.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!saveCard(cardf.last4.value, { bank: cardf.bank.value, dueDay: cardf.dueDay.value, closeDay: cardf.closeDay.value })) return toast('Informe os 4 últimos números do cartão.');
-      toast(`Cartão ${cardf.last4.value} salvo`);
+      const moved = alignCreditToDue();
+      toast(moved.length ? `Cartão ${cardf.last4.value} salvo. ${moved.length} lançamento${moved.length > 1 ? 's' : ''} no crédito ${moved.length > 1 ? 'foram' : 'foi'} para o mês do vencimento.` : `Cartão ${cardf.last4.value} salvo`, moved.length ? { action: 'Desfazer', onAction: () => undoAlign(moved), timeout: 10000 } : {});
     });
     root.querySelectorAll('[data-card-edit]').forEach((b) =>
       b.addEventListener('click', () => {
