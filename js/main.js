@@ -4,8 +4,7 @@ import { cloud, getState, init, subscribe } from './store.js';
 import { closeAllSheets, html, icon } from './ui.js';
 import { openPrintSheet } from './views/form.js';
 import { openAddMenu } from './views/adicionar.js';
-import { ingestExternalText, openNotificationsImport } from './views/importar.js';
-import { openFileImport } from './views/arquivo.js';
+import { openFileImport, openTextImport } from './views/arquivo.js';
 import { isNativeApp, startNative } from './native.js';
 import { setupLock } from './lock.js';
 import inicio from './views/home.js';
@@ -113,9 +112,8 @@ subscribe(() => render());
 cloud.onStatus = () => ui.route === 'ajustes' && render();
 render();
 
-// Entradas vindas de fora do app:
-// - automação do Android (MacroDroid/Tasker) abre  .../?registrar=<texto da notificação>
-// - menu "Compartilhar" do celular envia texto (GET ?text=) ou imagem (POST tratado pelo sw.js -> ?compartilhado=1)
+// Entrada vinda de fora do app: menu "Compartilhar" do celular envia texto (GET ?text=) ou imagem (POST tratado pelo sw.js -> ?compartilhado=1).
+// Nada é registrado sozinho: tudo abre para você conferir antes de salvar.
 async function handleIncoming() {
   let params;
   try {
@@ -123,7 +121,7 @@ async function handleIncoming() {
   } catch {
     return;
   }
-  const text = [params.get('registrar'), params.get('title'), params.get('text')].filter(Boolean).join('\n').trim();
+  const text = [params.get('title'), params.get('text')].filter(Boolean).join('\n').trim();
   const shared = params.has('compartilhado');
   if (!text && !shared) return;
   try {
@@ -131,7 +129,7 @@ async function handleIncoming() {
   } catch {
     /* ignore */
   }
-  if (text) return ingestExternalText(text);
+  if (text) return openTextImport({ text });
   try {
     const cache = await caches.open('meubolso-share');
     const fileRes = await cache.match('share/file');
@@ -150,17 +148,17 @@ async function handleIncoming() {
 function routeShared({ text, files }) {
   const images = files.filter((f) => f.type.startsWith('image/'));
   const docs = files.filter((f) => !f.type.startsWith('image/'));
-  // prints vão para notificações (várias movimentações por imagem); PDF, CSV, OFX e planilhas para a importação de arquivos
+  // um print vai para a leitura de compra; vários prints, PDF, CSV, OFX e planilhas para a importação de arquivos
   if (docs.length) openFileImport({ files: docs, mode: /fatura|invoice/i.test(docs[0].name) ? 'fatura' : 'extrato' });
   else if (images.length > 1) openFileImport({ files: images });
-  else if (images.length) openNotificationsImport({ file: images[0] });
-  else if (text) ingestExternalText(text);
+  else if (images.length) openPrintSheet({ file: images[0] });
+  else if (text) openTextImport({ text });
   else openPrintSheet();
 }
 handleIncoming();
 
-// App Android: notificações de bancos/carteiras e menu Compartilhar chegam pela ponte nativa
-startNative({ onText: (text) => ingestExternalText(text, { silent: true }), onShared: routeShared });
+// App Android: o menu Compartilhar chega pela ponte nativa
+startNative({ onShared: routeShared });
 
 // Instalação no celular (fora do Artifact e do app Android). Service worker só funciona em http(s) próprio.
 if ('serviceWorker' in navigator && !window.claude && !isNativeApp && location.protocol.startsWith('http')) {

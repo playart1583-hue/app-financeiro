@@ -22,28 +22,20 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 | **Plano para zerar dívidas**: compara *Nome limpo primeiro*, *Avalanche* (menos juros) e *Bola de neve*; mostra o mês em que cada dívida acaba | Dívidas |
 | **Contrato de empréstimo por print**: lê valor liberado, valor financiado, parcelas, taxa, CET, IOF, tarifas e seguro; mostra o custo real, **o que melhora, o que piora e o impacto no dia a dia** (sobra mensal antes × depois, % da renda comprometida, metas que atrasam) antes de você contratar; pode quitar dívidas caras com o dinheiro | Início → *Empréstimo* · Planejar · Dívidas |
 | **Encerre primeiro**: ranking de Pix parcelados, parcelamentos com juros e empréstimos do mais caro para o mais barato, com valor para quitar hoje e juros economizados (desconto obrigatório na quitação antecipada, CDC art. 52) | Dívidas e Dicas |
-| **Notificações do Mercado Pago, 99, 99Pay e bancos**: várias de uma vez por print ou texto, com aviso de lançamento repetido | Início → *Notificações* |
 | **Importar arquivos** de bancos e outros apps: CSV, TSV, TXT, **OFX**, Excel (XLSX/XLS/ODS), JSON e PDF de extrato. Reconhece Nubank, Inter, Mercado Pago, Mobills/Organizze e planilhas genéricas; você ajusta as colunas, revê categorias e os repetidos ficam desmarcados | Extrato → *Importar arquivo* · Início → *Arquivo* |
 | **Importar a fatura do cartão** (PDF, prints das páginas, CSV ou OFX): lê cartão, vencimento e total, ignora o pagamento da fatura, marca estornos e juros/IOF, detecta parcelas ("3/10") e cria as parcelas futuras; confere a soma com o total da fatura | Extrato → *Importar fatura* · Início → *Fatura* |
-| **Registro automático** (Android): compartilhe um print/texto para o app instalado, ou use uma automação (MacroDroid) que abre `…/?registrar=<texto da notificação>` | Ajustes → Mercado Pago, 99 e notificações |
 | Cofrinhos (metas) com quanto guardar por mês até o prazo e rendimento estimado | Planejar → Cofrinhos |
 | Orçamento por categoria com alertas em 80% e 100% | Planejar → Orçamentos |
 | Sugestões automáticas: onde cortar, gastos pequenos, arredondamento para o cofrinho, reserva de emergência, dívida mais cara, plano de quitação | Início e Planejar → Dicas |
 | Ocultar valores, tema claro/escuro, backup (exportar/importar JSON) | Ajustes |
-| **Botão +** com todas as entradas: preencher à mão, ler print, documento ou fatura, colar texto, várias notificações, contrato de empréstimo | Barra inferior |
-| **Colar texto**: notificações, linhas de extrato, texto de fatura ou anotações ("almoço 32,90 débito", uma por linha) viram lançamentos para conferir | + → *Colar texto* |
-| **Entrada × saída nas notificações**: entende "você enviou", "te enviou", "recebeu seu Pix", "recebido por" etc. Se algum entrar do lado errado, troque receita/despesa no lançamento: o app aprende o modelo daquela notificação e oferece corrigir as parecidas | Extrato → tocar no lançamento |
-| **Transferências entre suas contas** (ex.: Santander → Mercado Pago): aparecem no extrato com ↔️ e não contam como gasto nem ganho. O app reconhece o par (saiu de um app e entrou no outro com o mesmo valor em até 30 min), o seu nome como destinatário e frases como "mesma titularidade"; dá para marcar à mão em *Gasto · Ganho · ↔ Entre contas* no lançamento | Extrato · Ajustes → *Seu nome completo* |
+| **Botão +** com todas as entradas: preencher à mão, ler print, documento ou fatura, colar texto, contrato de empréstimo | Barra inferior |
+| **Colar texto**: linhas de extrato, texto de fatura ou anotações ("almoço 32,90 débito", uma por linha) viram lançamentos para conferir | + → *Colar texto* |
+| **Transferências entre suas contas** (ex.: Santander → Mercado Pago): escolha *↔ Entre contas* no lançamento; aparece no extrato e não conta como gasto nem ganho. O app lembra o seu nome e marca a outra ponta (mesmo valor, até 30 min) | Extrato · Ajustes → *Seu nome completo* |
 | **Bloqueio por digital** (app Android): pede digital, rosto ou senha do celular ao abrir e ao voltar depois de 30 s | Ajustes → *Bloqueio por digital* |
 
 ## App Android (APK)
 
-O app também é empacotado como APK com o [Capacitor](https://capacitorjs.com), em duas variantes (mesmo app, mesma assinatura — dá para trocar de uma para a outra sem perder dados):
-
-- **`meu-bolso-X.apk` (leve, recomendada):** instala normalmente fora da Play Store. O registro automático das notificações é feito com o **MacroDroid** (Play Store), que repassa cada notificação para o Meu Bolso pelo broadcast `br.com.meubolso.app.REGISTRAR` (extra `texto`), sem abrir o app. A macro pronta está em `automacao/MeuBolso.macro` e em cada Release; o passo a passo e o diagnóstico ficam em *Ajustes*.
-- **`meu-bolso-X-completo.apk`** (só nos *Artifacts* da execução do Actions, não em Releases): o próprio app lê as notificações do Mercado Pago, 99, 99Pay e bancos. **No Brasil, o Google Play Protect bloqueia a instalação** de APKs baixados da internet que pedem acesso às notificações; essa variante serve para instalar via computador (`adb install`) ou para uma futura publicação na Play Store.
-
-Nas duas: **Compartilhar → Meu Bolso** para prints, textos, PDF de fatura, CSV, OFX e planilhas.
+O app também é empacotado como APK com o [Capacitor](https://capacitorjs.com). Ele **não lê notificações** e não registra nada sozinho: os lançamentos entram pelo formulário, por print, por documento ou por texto colado. Use **Compartilhar → Meu Bolso** para prints, textos, PDF de fatura, CSV, OFX e planilhas.
 
 Instalar: baixe o APK mais recente em **Releases** (ou `dist/`) no celular, abra e permita "instalar apps desconhecidos" para o app que você usou para abrir o arquivo.
 
@@ -52,7 +44,7 @@ Gerar de novo:
 ```bash
 npm install
 npm run android:apk        # precisa de JDK 21 e Android SDK (ANDROID_HOME)
-# saída: android/app/build/outputs/apk/{leve,completo}/release/
+# saída: android/app/build/outputs/apk/release/
 ```
 
 Ou pelo GitHub: *Actions → APK Android → Run workflow* (também roda a cada push). O APK é publicado em **Releases**, pronto para baixar no celular, e fica também em *Artifacts* da execução. Em repositório privado, o GitHub Actions precisa estar liberado na conta (Settings → Billing and plans).
@@ -84,7 +76,7 @@ A leitura tenta, nesta ordem:
 2. **Claude API com sua chave** (*Ajustes → Leitura de prints*): a chave fica só no aparelho. Usa o modelo `claude-opus-5-5` com saída estruturada (JSON validado).
 3. **OCR no aparelho** (Tesseract.js) + interpretação por regras em `js/parser.js`: funciona sem conta, com menos precisão.
 
-Também é possível colar o texto de uma notificação ou comprovante.
+Também é possível colar o texto de um comprovante.
 
 ## Importar de outros apps e da fatura
 
@@ -94,11 +86,7 @@ Na fatura, o pagamento da fatura anterior vem desmarcado (para não contar o gas
 
 ## Mercado Pago e 99
 
-Nenhum dos dois oferece uma API para apps pessoais lerem o extrato: a API do Mercado Pago é voltada a vendedores (pagamentos recebidos) e exige servidor próprio, e a 99 não tem API pública. Um app de navegador também não consegue ler as notificações do celular. Por isso o app oferece três caminhos:
-
-1. **Print ou texto** (Android e iPhone): Início → *Notificações*.
-2. **Compartilhar** (Android, app instalado na tela inicial): o app aparece no menu Compartilhar e recebe prints e textos.
-3. **Automação** (Android): importe no MacroDroid a macro pronta [`automacao/MeuBolso.macro`](automacao/MeuBolso.macro) (também anexada em cada Release): *☰ → Exportar/Importar → Importar*. Ela repassa as notificações do Mercado Pago, 99 e bancos para o app pelo broadcast `br.com.meubolso.app.REGISTRAR` (extra `texto` = `{not_app_name} {not_title} {notification}`); a ação alternativa, desativada, abre `meubolso://registrar?texto=...`. Em *Ajustes → Diagnóstico* o app mostra tudo o que chegou. No navegador, a ação *Abrir site* usa `https://SEU-ENDERECO/?registrar={not_title} {notification}`. O app registra sozinho e mostra "Desfazer"; repetidos pedem confirmação.
+Nenhum dos dois oferece uma API para apps pessoais lerem o extrato, e o registro automático pelas notificações do celular erra demais (Pix enviado lido como recebido, transferências entre contas próprias contadas como gasto). Por isso o app não usa notificações: importe o extrato (CSV/PDF) ou mande o print do comprovante e confira antes de salvar.
 
 A conexão direta com bancos e carteiras exige Open Finance via um agregador autorizado (Pluggy, Belvo), com servidor e contrato: é o próximo passo natural se o protótipo virar produto.
 

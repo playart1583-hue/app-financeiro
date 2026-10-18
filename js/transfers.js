@@ -1,6 +1,6 @@
 // Transferências entre as suas próprias contas (ex.: Santander -> Mercado Pago): o dinheiro continua seu,
-// então não entram como gasto nem como ganho. Reconhece pela frase da notificação, pelo seu nome como
-// destinatário/remetente e pelo par "saiu de um app, entrou no outro" com o mesmo valor em poucos minutos.
+// então não entram como gasto nem como ganho. Você marca no lançamento ("Entre contas"); o app
+// lembra o seu nome e marca a outra ponta (saiu de uma conta e entrou na outra com o mesmo valor em poucos minutos).
 import { normalize } from './categories.js';
 import { getState, updateSettings, updateTransaction } from './store.js';
 
@@ -29,7 +29,7 @@ export function rememberOwnName(name) {
   updateSettings({ ownNames: [...ownNames(), t.join(' ')] });
 }
 
-/** A notificação sozinha já diz que é entre contas suas? */
+/** O texto do lançamento já diz que é entre contas suas? */
 export function looksOwnTransfer(d) {
   const t = normalize(`${d.raw || ''} ${d.description || ''}`);
   if (OWN_PHRASE.test(t)) return true;
@@ -73,20 +73,6 @@ export function transferLabel(a, b) {
   const out = a.type === 'expense' ? a : b;
   const inn = a.type === 'expense' ? b : a;
   return `Transferência ${out?.card || 'outra conta'} → ${inn?.card || 'outra conta'}`;
-}
-
-/** Marca um rascunho que vai ser salvo; se a outra ponta já existe, marca as duas. Retorna o rascunho. */
-export function classifyTransfer(d) {
-  const pair = findPair(d);
-  if (!pair && !looksOwnTransfer(d)) return d;
-  if (pair) {
-    const description = transferLabel(d, pair);
-    updateTransaction(pair.id, { internal: true, description });
-    rememberOwnName(pair.merchant);
-    rememberOwnName(d.merchant);
-    return { ...d, internal: true, description };
-  }
-  return { ...d, internal: true, description: transferLabel(d, null) };
 }
 
 /** Você marcou um lançamento como entre contas: lembra o nome e marca a outra ponta, se houver. */

@@ -14,7 +14,7 @@ export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().to
 const empty = () => ({
   version: 1,
   updatedAt: 0,
-  settings: { name: '', hideValues: false, theme: 'system', savingsRate: 0.008, demo: false, autoRegister: true },
+  settings: { name: '', hideValues: false, theme: 'system', savingsRate: 0.008, demo: false },
   transactions: [],
   budgets: {},
   goals: [],
@@ -92,9 +92,9 @@ function resetOnce(s) {
       /* sem espaço: segue sem a cópia */
     }
   }
-  const { name, hideValues, theme, savingsRate, autoRegister, lock } = s.settings;
+  const { name, hideValues, theme, savingsRate, lock } = s.settings;
   const next = empty();
-  next.settings = { ...next.settings, name, hideValues, theme, savingsRate, autoRegister, ...(lock !== undefined ? { lock } : {}), resetDone: RESET_ID };
+  next.settings = { ...next.settings, name, hideValues, theme, savingsRate, ...(lock !== undefined ? { lock } : {}), resetDone: RESET_ID };
   return next;
 }
 
@@ -148,8 +148,6 @@ export function addTransaction(draft) {
     merchant: draft.merchant || '',
     location: draft.location || '',
     source: draft.source || 'manual',
-    // texto original da notificação: permite aprender quando você corrige receita/despesa
-    ...(draft.raw ? { raw: String(draft.raw).slice(0, 400) } : {}),
     // transferência entre contas suas: aparece no extrato, mas não conta como gasto nem ganho
     ...(draft.internal ? { internal: true } : {}),
     ...(draft.loanId ? { loanId: draft.loanId } : {}),
@@ -415,7 +413,7 @@ export function payoffInstallments(groupId, amount, date = toISO(new Date())) {
   });
 }
 
-/** Lançamento parecido já registrado (mesmo tipo, valor e data próxima): evita duplicar notificações. */
+/** Lançamento parecido já registrado (mesmo tipo, valor e data próxima): evita importar o mesmo lançamento duas vezes. */
 export function findDuplicate(draft) {
   const d = new Date((draft.date || toISO(new Date())) + 'T12:00:00');
   return state.transactions.find((t) => {

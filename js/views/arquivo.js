@@ -294,7 +294,7 @@ export function openTextImport({ text = '' } = {}) {
   openSheet({
     title: 'Colar texto',
     body: html`<div class="print">
-      <p class="hint">Cole notificações do banco, Mercado Pago ou 99, linhas do extrato, o texto da fatura, uma conversa ou anotações como <b>"almoço 32,90 débito"</b> (uma por linha). O app separa cada lançamento para você conferir.</p>
+      <p class="hint">Cole linhas do extrato, o texto da fatura, uma conversa ou anotações como <b>"almoço 32,90 débito"</b> (uma por linha). O app separa cada lançamento para você conferir.</p>
       <label class="field"><span>Texto</span><textarea id="t-text" rows="8" placeholder="Você enviou um Pix de R$ 50,00 para Maria Souza&#10;03/10 IFOOD *RESTAURANTE 45,90&#10;uber 18 ontem&#10;+ freela 300">${text}</textarea></label>
       <div class="btn-row">
         <button type="button" class="btn" id="t-paste">${icon('copy')} Colar</button>

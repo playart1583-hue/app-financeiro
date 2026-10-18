@@ -1,4 +1,4 @@
-// Folha genérica "enviar print ou colar texto", usada para compras, notificações, contratos e Serasa.
+// Folha genérica "enviar print ou colar texto", usada para compras, contratos e Serasa.
 import { currentEngine } from '../receipt.js';
 import { esc, html, icon, openSheet } from '../ui.js';
 

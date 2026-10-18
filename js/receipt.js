@@ -1,6 +1,6 @@
 // Leitura de prints: compra/pagamento (onde, quando, horário, cartão, parcelas, valor) e lista de dívidas do Serasa.
 // Motores, na ordem: Claude dentro do app da Claude (Artifact) → Claude API com chave própria → OCR no aparelho.
-import { parseLoanText, parseNotifications, parseReceiptText, parseSerasaText, toISO } from './parser.js';
+import { parseLoanText, parseReceiptText, parseSerasaText, toISO } from './parser.js';
 import { parseStatementText } from './importers.js';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, CLASSIFICATIONS, categorize, defaultClassification } from './categories.js';
 import { getApiKey } from './store.js';
@@ -184,26 +184,6 @@ async function readImage(file, { prompt, schema, maxSide = 1600, signal, onStatu
 export async function analyzePurchase(file, opts = {}) {
   const r = await readImage(file, { ...opts, prompt: purchasePrompt(toISO(new Date())), schema: PURCHASE_SCHEMA });
   return { data: r.json ? normalizeClaudePurchase(r.json) : { ...parseReceiptText(r.text), rawText: r.text }, engine: r.engine };
-}
-
-// ---------- Várias notificações (Mercado Pago, 99, bancos) ----------
-
-const notificationsPrompt = (today) => `Este print mostra uma ou mais notificações ou movimentações financeiras (central de notificações do celular, extrato/atividade do Mercado Pago, 99Pay, 99, banco ou carteira digital). Hoje é ${today}.
-Liste CADA movimentação de dinheiro (Pix enviado ou recebido, pagamento, compra, transferência, corrida da 99, recarga) e devolva SOMENTE {"movimentos": [...]}. Ignore propagandas, ofertas e avisos sem valor.
-Cada item tem estes campos ("banco" é o app de origem: Mercado Pago, 99Pay, Nubank…):
-${purchaseGuide()}`;
-
-const NOTIFICATIONS_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['movimentos'],
-  properties: { movimentos: { type: 'array', items: PURCHASE_SCHEMA } },
-};
-
-export async function analyzeNotifications(file, opts = {}) {
-  const r = await readImage(file, { ...opts, maxSide: 2000, prompt: notificationsPrompt(toISO(new Date())), schema: NOTIFICATIONS_SCHEMA });
-  const items = r.json ? (r.json.movimentos || []).map(normalizeClaudePurchase).filter((x) => x.amount > 0) : parseNotifications(r.text);
-  return { items, engine: r.engine };
 }
 
 // ---------- Contrato de empréstimo ----------

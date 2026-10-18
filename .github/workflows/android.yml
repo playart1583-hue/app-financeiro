@@ -41,7 +41,7 @@ jobs:
             exit 1
           fi
           openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in android/keystore/meubolso.jks.enc -out android/keystore/meubolso.jks -pass env:ANDROID_KEYSTORE_PASSWORD
-      - run: ./gradlew assembleLeveRelease assembleCompletoRelease --no-daemon
+      - run: ./gradlew assembleRelease --no-daemon
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -49,36 +49,27 @@ jobs:
         id: apk
         run: |
           VERSION=$(grep -oP 'versionName "\K[^"]+' android/app/build.gradle)
-          cp android/app/build/outputs/apk/leve/release/app-leve-release.apk "meu-bolso-$VERSION.apk"
-          cp android/app/build/outputs/apk/completo/release/app-completo-release.apk "meu-bolso-$VERSION-completo.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "meu-bolso-$VERSION.apk"
           echo "file=meu-bolso-$VERSION.apk" >> "$GITHUB_OUTPUT"
-          echo "full=meu-bolso-$VERSION-completo.apk" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: meu-bolso-apk
-          path: |
-            ${{ steps.apk.outputs.file }}
-            ${{ steps.apk.outputs.full }}
+          path: ${{ steps.apk.outputs.file }}
       - name: Conferir assinatura
         run: |
           SIGNER=$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner
           $SIGNER verify --print-certs "${{ steps.apk.outputs.file }}"
-          $SIGNER verify --print-certs "${{ steps.apk.outputs.full }}"
       - name: Publicar em Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-v${{ steps.apk.outputs.version }}-${{ github.run_number }}
           name: Meu Bolso ${{ steps.apk.outputs.version }} (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
-          # só a variante leve vai para Releases: a "completo" é bloqueada pelo Play Protect quando baixada no celular
-          # e fica apenas nos Artifacts da execução, para instalar pelo computador
-          files: |
-            ${{ steps.apk.outputs.file }}
-            automacao/MeuBolso.macro
+          files: ${{ steps.apk.outputs.file }}
           make_latest: true
           body: |
             **Baixe o `${{ steps.apk.outputs.file }}`** no celular, abra e permita instalar apps desta fonte.
-            O registro automático das notificações é feito com o MacroDroid: baixe também o `MeuBolso.macro` e importe no MacroDroid (☰ → Exportar/Importar → Importar).
+            Os lançamentos entram pelo formulário, por print, por documento (PDF, DOCX, CSV, OFX, planilhas) ou por texto colado.
 
             Gerado a partir de ${{ github.ref_name }} (${{ github.sha }}).

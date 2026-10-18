@@ -307,39 +307,6 @@ export function flowDirection(t) {
 }
 
 /**
- * "Molde" de uma notificação: o texto sem valores, datas, horários e o nome de quem enviou/recebeu.
- * Serve para o app aprender quando você corrige receita/despesa e acertar as próximas iguais.
- */
-export function notificationTemplate(text, name = '') {
-  const original = String(text || '');
-  const n = normalize(String(name || '')).trim();
-  // nomes de pessoas e lojas vêm com inicial maiúscula: ficam de fora, menos as palavras que dizem o que aconteceu
-  const words = original
-    .trim()
-    .replace(APP_PREFIX, '')
-    .split(/\s+/)
-    .filter((w) => !/^[A-ZÀ-Ú]/.test(w) || TEMPLATE_WORDS.test(normalize(w).replace(/[^a-z]/g, '')))
-    .join(' ');
-  let t = normalize(words);
-  if (n.length > 2) t = t.split(n).join(' ');
-  const app = findApp(normalize(original));
-  const body = t
-    .replace(/r\$/g, ' ')
-    .replace(/[^a-z\s]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length > 1)
-    .join(' ');
-  return [app ? normalize(app) : '', body].filter(Boolean).join(' ');
-}
-const TEMPLATE_WORDS = /^(pix|ted|doc|transferencia|voce|seu|sua|recebido|recebida|recebeu|enviado|enviada|enviou|pagamento|pago|paga|compra|aprovado|aprovada|realizado|realizada|dinheiro|chegou|novo|nova|deposito|estorno|saque|debito|credito|cartao|fatura|rendimento|cashback|corrida|viagem|transferido|transferida|parcela)$/;
-
-/** Chaves usadas para lembrar a correção: o molde inteiro e o começo dele (app + título). */
-export function templateKeys(text, name = '') {
-  const tpl = notificationTemplate(text, name);
-  return tpl ? [tpl, `^${tpl.split(' ').slice(0, 5).join(' ')}`] : [];
-}
-
-/**
  * Separa um bloco com várias notificações (coladas ou lidas de um print da central de notificações)
  * e interpreta cada uma. Blocos sem valor são descartados.
  */

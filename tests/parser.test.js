@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findCard, parseAmount, parseNotifications, parseQuickEntry, parseReceiptText, parseSerasaText, templateKeys } from '../js/parser.js';
+import { findCard, parseAmount, parseNotifications, parseQuickEntry, parseReceiptText, parseSerasaText } from '../js/parser.js';
 import { categorize } from '../js/categories.js';
 
 const today = new Date(2026, 9, 18);
@@ -110,9 +110,3 @@ test('notificações: entrada x saída em frases diferentes', () => {
   }
 });
 
-test('molde da notificação ignora valor, data e nome', () => {
-  const a = templateKeys('Mercado Pago João Silva te enviou R$ 20,00\n18/10/2026 19:20', 'João Silva');
-  const b = templateKeys('Mercado Pago Ana te enviou R$ 7,50\n19/10/2026 08:02', 'Ana');
-  assert.deepEqual(a, b);
-  assert.equal(a[0], 'mercado pago te enviou');
-});

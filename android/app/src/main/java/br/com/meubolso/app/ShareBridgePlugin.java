@@ -1,12 +1,9 @@
 package br.com.meubolso.app;
 
-import android.content.ComponentName;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.OpenableColumns;
-import android.provider.Settings;
 import android.util.Base64;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -22,31 +19,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.io.InputStream;
 import java.util.ArrayList;
-import org.json.JSONException;
 
-/** Ponte entre o Android e o app web: notificações capturadas e conteúdo recebido pelo menu Compartilhar. */
-@CapacitorPlugin(name = "NotificationReader")
-public class NotificationReaderPlugin extends Plugin {
+/** Ponte entre o Android e o app web: conteúdo recebido pelo menu Compartilhar e salvar o backup. */
+@CapacitorPlugin(name = "ShareBridge")
+public class ShareBridgePlugin extends Plugin {
 
     private static final int MAX_FILE_BYTES = 15 * 1024 * 1024;
-
-    @Override
-    public void load() {
-        NotificationStore.listener = item -> {
-            try {
-                JSObject data = new JSObject();
-                data.put("item", JSObject.fromJSONObject(item));
-                notifyListeners("notification", data, true);
-            } catch (JSONException ignored) {
-                // nada a enviar
-            }
-        };
-    }
-
-    @Override
-    protected void handleOnDestroy() {
-        NotificationStore.listener = null;
-    }
 
     @Override
     protected void handleOnNewIntent(Intent intent) {
@@ -58,68 +36,6 @@ public class NotificationReaderPlugin extends Plugin {
 
     static boolean isShare(Intent intent) {
         return intent != null && (Intent.ACTION_SEND.equals(intent.getAction()) || Intent.ACTION_SEND_MULTIPLE.equals(intent.getAction()));
-    }
-
-    /** A variante instalada tem a leitura própria das notificações? (só a "completo") */
-    @PluginMethod
-    public void features(PluginCall call) {
-        boolean listener;
-        try {
-            getContext().getPackageManager().getServiceInfo(new ComponentName(getContext(), NotificationReaderService.class), 0);
-            listener = true;
-        } catch (PackageManager.NameNotFoundException e) {
-            listener = false;
-        }
-        JSObject ret = new JSObject();
-        ret.put("listener", listener);
-        call.resolve(ret);
-    }
-
-    @PluginMethod
-    public void isEnabled(PluginCall call) {
-        String flat = Settings.Secure.getString(getContext().getContentResolver(), "enabled_notification_listeners");
-        String me = new ComponentName(getContext(), NotificationReaderService.class).flattenToString();
-        JSObject ret = new JSObject();
-        ret.put("enabled", flat != null && flat.contains(me));
-        call.resolve(ret);
-    }
-
-    @PluginMethod
-    public void openSettings(PluginCall call) {
-        Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        getContext().startActivity(intent);
-        call.resolve();
-    }
-
-    @PluginMethod
-    public void openAppInfo(PluginCall call) {
-        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName()));
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        getContext().startActivity(intent);
-        call.resolve();
-    }
-
-    @PluginMethod
-    public void automationLog(PluginCall call) {
-        JSObject ret = new JSObject();
-        try {
-            ret.put("items", new JSArray(NotificationStore.readLog(getContext()).toString()));
-        } catch (JSONException e) {
-            ret.put("items", new JSArray());
-        }
-        call.resolve(ret);
-    }
-
-    @PluginMethod
-    public void getPending(PluginCall call) {
-        JSObject ret = new JSObject();
-        try {
-            ret.put("items", new JSArray(NotificationStore.takeAll(getContext()).toString()));
-        } catch (JSONException e) {
-            ret.put("items", new JSArray());
-        }
-        call.resolve(ret);
     }
 
     /** Salva um arquivo (backup) abrindo o menu Compartilhar: Drive, Arquivos, WhatsApp, e-mail... */

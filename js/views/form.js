@@ -1,6 +1,5 @@
 // Formulário de lançamento (gasto/ganho), leitura de print e registro rápido por texto.
 import { addTransaction, deleteTransaction, findDuplicate, getState, restoreTransactions, updateTransaction } from '../store.js';
-import { flipAll, learnFlow, similarFlow, swapLabel } from '../learn.js';
 import { markOwnTransfer } from '../transfers.js';
 import { CLASSIFICATIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, categorize, defaultClassification, getCategory } from '../categories.js';
 import { analyzeInstallments } from '../finance.js';
@@ -282,23 +281,6 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
             const pair = markOwnTransfer({ ...before, ...draft, id: editId });
             return toast(pair ? 'Marcado como transferência entre suas contas, junto com a outra ponta. Não conta mais como gasto nem ganho.' : 'Marcado como transferência entre suas contas. Não conta mais como gasto nem ganho.');
           }
-          // corrigiu receita/despesa de uma notificação: aprende e oferece corrigir as parecidas
-          if (before.source === 'notificacao' && before.type !== type) {
-            learnFlow(before, type);
-            const similar = similarFlow(before, before.type);
-            const label = type === 'income' ? 'receita' : 'despesa';
-            if (similar.length) {
-              return toast(`Corrigido. As próximas notificações iguais entram como ${label}. Há mais ${similar.length} parecida${similar.length > 1 ? 's' : ''} como ${before.type === 'income' ? 'receita' : 'despesa'}.`, {
-                action: `Corrigir ${similar.length > 1 ? 'todas' : ''}`.trim(),
-                onAction: () => {
-                  flipAll(similar, type);
-                  toast(`${similar.length} lançamento${similar.length > 1 ? 's' : ''} corrigido${similar.length > 1 ? 's' : ''} para ${label}`);
-                },
-                timeout: 15000,
-              });
-            }
-            return toast(`Corrigido. As próximas notificações iguais entram como ${label}.`);
-          }
           toast('Lançamento atualizado');
           return;
         }
@@ -338,6 +320,9 @@ export function prefillFromExtract(x) {
   };
 }
 
+/** "Pix de Maria" <-> "Pix para Maria" ao trocar entre ganho e gasto. */
+const swapLabel = (description, type) => String(description || '').replace(/^(Pix|Transferência) (de|para) /, (_, what) => `${what} ${type === 'income' ? 'de' : 'para'} `);
+
 // "PADARIA DOCE PAO LTDA" -> "Padaria Doce Pao"
 const tidy = (s) =>
   String(s)
@@ -352,8 +337,8 @@ export function openPrintSheet({ file, text } = {}) {
   openReader({
     title: 'Ler print da compra',
     dropTitle: 'Escolher print da compra',
-    dropText: 'Notificação do banco, Mercado Pago, 99, comprovante Pix, nota fiscal ou fatura.',
-    textLabel: 'Texto da notificação ou comprovante',
+    dropText: 'Comprovante Pix, nota fiscal, recibo ou tela da compra.',
+    textLabel: 'Texto do comprovante',
     textPlaceholder: 'Ex.: Você enviou um Pix de R$ 50,00 para Maria Souza',
     initialFile: file,
     initialText: text,

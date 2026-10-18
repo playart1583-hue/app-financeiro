@@ -3,15 +3,13 @@ import { html, icon, openSheet } from '../ui.js';
 import { openFileImport, openTextImport } from './arquivo.js';
 import { openLoanContract } from './emprestimo.js';
 import { openPrintSheet, openTxForm } from './form.js';
-import { openNotificationsImport } from './importar.js';
 
 const OPTIONS = [
   ['expense', 'minus', 'Gasto', 'Preencher à mão: valor, categoria, parcelas, cartão'],
   ['income', 'plus', 'Ganho', 'Salário, freela, Pix recebido'],
-  ['print', 'camera', 'Ler print', 'Compra, comprovante Pix ou notificação'],
+  ['print', 'camera', 'Ler print', 'Compra, comprovante Pix ou nota fiscal'],
   ['file', 'upload', 'Documento ou fatura', 'PDF, DOCX, TXT, CSV, OFX, Excel ou prints de várias páginas'],
-  ['text', 'copy', 'Colar texto', 'Notificações, extrato, fatura ou anotações'],
-  ['notifications', 'bell', 'Várias notificações', 'Print da central de notificações ou do app do banco'],
+  ['text', 'copy', 'Colar texto', 'Extrato, fatura ou anotações'],
   ['loan', 'calc', 'Contrato de empréstimo', 'Ver o custo e o impacto antes de contratar'],
 ];
 
@@ -31,7 +29,6 @@ export function openAddMenu() {
         if (id === 'print') openPrintSheet();
         if (id === 'file') openFileImport();
         if (id === 'text') openTextImport();
-        if (id === 'notifications') openNotificationsImport();
         if (id === 'loan') openLoanContract();
       });
     },

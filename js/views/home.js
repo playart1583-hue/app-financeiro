@@ -2,13 +2,12 @@ import { currentBalance, goalSaved, keyOf, monthSummary, projectMonth } from '..
 import { getCategory } from '../categories.js';
 import { buildInsights } from '../insights.js';
 import { toISO } from '../parser.js';
-import { clearDemo, updateSettings } from '../store.js';
-import { emptyState, hbars, html, icon, money, monthName, progress } from '../ui.js';
+import { clearDemo, deleteTransactions, restoreTransactions, updateSettings } from '../store.js';
+import { emptyState, hbars, html, icon, money, monthName, progress, toast } from '../ui.js';
 import { txRow } from './extrato.js';
 import { insightCard } from './dicas.js';
 import { openPrintSheet, openTxForm, quickPreview, quickSave } from './form.js';
 import { openLoanContract } from './emprestimo.js';
-import { openNotificationsImport } from './importar.js';
 import { openFileImport, openTextImport } from './arquivo.js';
 
 export default {
@@ -18,6 +17,7 @@ export default {
     const key = keyOf(today);
     const bal = currentBalance(state, today);
     const sum = monthSummary(state, key);
+    const fromNotifications = state.transactions.filter((t) => t.source === 'notificacao');
     const proj = projectMonth(state, today);
     const insights = buildInsights(state, today).slice(0, 3);
     const recent = state.transactions.filter((t) => t.date <= toISO(today)).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)).slice(0, 5);
@@ -50,13 +50,16 @@ export default {
           <h2 class="card-title">${icon('spark')} Comece por aqui</h2>
           <p>Envie seus comprovantes, faturas e extratos: o app lê, separa gastos e ganhos e já calcula seu mês.</p>
           <div class="start-actions">
-            <button type="button" class="tile" data-act="print"><span class="tile-ic">${icon('camera')}</span><span class="tile-main"><b>Ler print</b><small>Compra, Pix ou notificação</small></span></button>
+            <button type="button" class="tile" data-act="print"><span class="tile-ic">${icon('camera')}</span><span class="tile-main"><b>Ler print</b><small>Compra ou comprovante Pix</small></span></button>
             <button type="button" class="tile" data-act="invoice"><span class="tile-ic">${icon('card')}</span><span class="tile-main"><b>Importar fatura</b><small>PDF, DOCX, print, CSV ou OFX</small></span></button>
             <button type="button" class="tile" data-act="file"><span class="tile-ic">${icon('upload')}</span><span class="tile-main"><b>Importar extrato ou arquivo</b><small>Bancos, Mercado Pago, outros apps</small></span></button>
-            <button type="button" class="tile" data-act="text"><span class="tile-ic">${icon('copy')}</span><span class="tile-main"><b>Colar texto</b><small>Notificações, extrato ou anotações</small></span></button>
+            <button type="button" class="tile" data-act="text"><span class="tile-ic">${icon('copy')}</span><span class="tile-main"><b>Colar texto</b><small>Extrato, fatura ou anotações</small></span></button>
             <button type="button" class="tile" data-act="new-income"><span class="tile-ic">${icon('plus')}</span><span class="tile-main"><b>Lançar seu salário</b><small>Marque "repetir todo mês" para entrar nas projeções</small></span></button>
           </div>
         </section>`
+      : ''}
+    ${fromNotifications.length && !state.settings.notifCleanup
+      ? html`<div class="banner"><p><b>${fromNotifications.length} lançamento${fromNotifications.length > 1 ? 's vieram' : ' veio'} das notificações automáticas</b>, que foram desligadas. Quer apagar e deixar só o que você registrar?</p><div class="btn-row"><button type="button" class="btn sm" data-act="notif-del">Apagar</button><button type="button" class="btn ghost sm" data-act="notif-keep">Manter</button></div></div>`
       : ''}
     ${state.settings.demo ? html`<div class="banner"><p><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece do zero.</p><button type="button" class="btn sm" data-act="clear-demo">Apagar exemplos</button></div>` : ''}
 
@@ -64,7 +67,6 @@ export default {
       <button type="button" data-act="new-expense"><span class="q-ic">${icon('minus')}</span>Gasto</button>
       <button type="button" data-act="new-income"><span class="q-ic">${icon('plus')}</span>Ganho</button>
       <button type="button" data-act="print"><span class="q-ic">${icon('camera')}</span>Ler print</button>
-      <button type="button" data-act="notifications"><span class="q-ic">${icon('bell')}</span>Notificações</button>
       <button type="button" data-act="invoice"><span class="q-ic">${icon('card')}</span>Fatura</button>
       <button type="button" data-act="file"><span class="q-ic">${icon('upload')}</span>Arquivo</button>
       <button type="button" data-act="text"><span class="q-ic">${icon('copy')}</span>Colar texto</button>
@@ -136,10 +138,16 @@ export default {
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (act === 'toggle-hide') updateSettings({ hideValues: !state.settings.hideValues });
       if (act === 'clear-demo') clearDemo();
+      if (act === 'notif-keep') updateSettings({ notifCleanup: true });
+      if (act === 'notif-del') {
+        const removed = state.transactions.filter((t) => t.source === 'notificacao');
+        deleteTransactions(removed.map((t) => t.id));
+        updateSettings({ notifCleanup: true });
+        toast(`${removed.length} lançamento${removed.length > 1 ? 's apagados' : ' apagado'}`, { action: 'Desfazer', onAction: () => restoreTransactions(removed) });
+      }
       if (act === 'new-expense') openTxForm({ prefill: { type: 'expense' } });
       if (act === 'new-income') openTxForm({ prefill: { type: 'income', category: 'salario', method: 'transferencia' } });
       if (act === 'print') openPrintSheet();
-      if (act === 'notifications') openNotificationsImport();
       if (act === 'contract') openLoanContract();
       if (act === 'invoice') openFileImport({ mode: 'fatura' });
       if (act === 'file') openFileImport();
