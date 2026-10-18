@@ -42,3 +42,9 @@ test('print da Amazon: "Visa terminando em 2223", 6x, sem confundir o final com 
   const r = parseReceiptText('Pesquisar na Amazon.com.br\nResumo do pedido\nPedido realizado 14 de outubro de 2026\nTotal geral: R$ 218,00\nForma de pagamento\nVisa terminando em 2223\nEm 6x de R$ 36,35 sem juros', new Date(2026, 9, 18));
   assert.deepEqual([r.amount, r.date, r.method, r.card?.last4, r.installments, r.merchant, r.category], [218, '2026-10-14', 'credito', '2223', 6, 'Amazon', 'compras']);
 });
+
+test('boleto: vencimento à parte da data do gasto', async () => {
+  const { parseReceiptText } = await import('../js/parser.js');
+  const r = parseReceiptText('Boleto\nBeneficiário: ESCOLA ABC\nVencimento: 10/11/2026\nValor: R$ 350,00\nLinha digitável 23790.12345', new Date(2026, 9, 18));
+  assert.deepEqual([r.method, r.amount, r.dueDate, r.date], ['boleto', 350, '2026-11-10', null]);
+});

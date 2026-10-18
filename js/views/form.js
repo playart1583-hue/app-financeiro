@@ -162,27 +162,25 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           $('#f-inst-wrap').hidden = !canInstall;
           const n = canInstall ? +val('installments') || 1 : 1;
           $('#f-pmt-wrap').hidden = n <= 1;
-          // crédito (à vista ou parcelado) e parcelados: o lançamento vai para o vencimento da fatura
-          const withDue = canInstall && (n > 1 || method === 'credito');
-          $('#f-due-wrap').hidden = !withDue;
-          $('#f-due-label').textContent = n > 1 ? 'Vencimento da 1ª parcela' : 'Vencimento da fatura';
-          $('#f-due-hint').textContent = n > 1 ? 'As próximas parcelas entram nos meses seguintes, no mesmo dia.' : 'A compra entra no mês em que a fatura vence.';
-          if (withDue) autoDue();
+          showDue(type, method, n > 1);
           $('#f-pmt').placeholder = method === 'pix_parcelado' ? 'com juros' : 'sem juros';
           $('#f-rec-wrap').hidden = n > 1;
           renderJuros(n, method);
-        } else {
-          // editando: compra no crédito mostra o vencimento (da fatura, ou da 1ª parcela se for parcelada)
-          const withDue = type === 'expense' && method === 'credito';
-          const group = Boolean(editing?.installment);
-          $('#f-due-wrap').hidden = !withDue;
-          $('#f-due-label').textContent = group ? 'Vencimento da 1ª parcela' : 'Vencimento da fatura';
-          $('#f-due-hint').textContent = group ? 'Todas as parcelas mudam junto: cada uma no mês seguinte, no mesmo dia.' : 'A compra fica no mês em que a fatura vence.';
-          if (withDue) autoDue();
-        }
+        } else showDue(type, method, Boolean(editing?.installment));
         $('#f-submit').textContent = editing ? 'Salvar alterações' : type === 'income' ? 'Salvar ganho' : type === 'transfer' ? 'Salvar transferência' : 'Salvar gasto';
       };
 
+      // vencimento em todo gasto: no crédito vem do cartão; sem cartão (boleto, fiado, Pix agendado) você preenche
+      const showDue = (type, method, parcelado) => {
+        const withDue = type === 'expense';
+        $('#f-due-wrap').hidden = !withDue;
+        if (!withDue) return;
+        $('#f-due-label').textContent = parcelado ? 'Vencimento da 1ª parcela' : method === 'credito' ? 'Vencimento da fatura' : method === 'boleto' ? 'Vencimento do boleto' : 'Vencimento (se for pagar depois)';
+        $('#f-due-hint').textContent = parcelado
+          ? editing ? 'Todas as parcelas mudam junto: cada uma no mês seguinte, no mesmo dia.' : 'As próximas parcelas entram nos meses seguintes, no mesmo dia.'
+          : method === 'credito' ? 'A compra entra no mês em que a fatura vence.' : 'Deixe em branco se já pagou. Com data, o gasto entra no mês em que vence.';
+        autoDue();
+      };
       // vencimento: vem do cartão cadastrado (dia da fatura); muda junto com a data enquanto você não mexer nele
       let dueTouched = Boolean(v.firstDue);
       const autoDue = () => {
@@ -190,7 +188,8 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
         if (!due || dueTouched) return;
         const info = cardInfo(val('last4'));
         $('#f-cycle').textContent = cycleText(info) ? `Cartão ${val('last4')}: ${cycleText(info)}. ` : '';
-        due.value = dueFor(val('date'), info);
+        // só o cartão no crédito preenche sozinho; nos outros casos o campo é seu
+        due.value = radio('method') === 'credito' || (+val('installments') || 1) > 1 ? dueFor(val('date'), info) : '';
       };
       f.querySelector('#f-due')?.addEventListener('input', () => (dueTouched = true));
       f.querySelector('#f-last4').addEventListener('input', (e) => {
@@ -327,11 +326,11 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           const before = { ...editing }; // updateTransaction altera o próprio objeto
           updateTransaction(editId, { ...rest, amount }, { wholeGroup: f.querySelector('#f-group')?.checked });
           // vencimento escrito (ou vindo do cartão): a compra e suas parcelas vão para os meses em que vencem
-          const due = type === 'expense' && method === 'credito' && !internal ? val('firstDue') || '' : '';
+          const due = type === 'expense' && !internal ? val('firstDue') || '' : '';
           // data da compra: a que está no campo (parcela k sem vencimento ainda: volta k-1 meses até a compra)
           const purchase = before.purchaseDate ? draft.date : addMonthsISO(draft.date, -((before.installment?.i || 1) - 1));
           setDueDates(editId, { purchaseDate: purchase, firstDue: due });
-          if (due) rememberCard(draft.last4, { bank: val('bank')?.trim(), due });
+          if (due && method === 'credito') rememberCard(draft.last4, { bank: val('bank')?.trim(), due });
           sheet.close();
           if (due && due !== before.date && !before.purchaseDate) return toast(`Lançamento atualizado e levado para o vencimento (${dateBR(due)})`);
           if (draft.internal && !before.internal) {
@@ -345,8 +344,8 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           toast('Lançamento atualizado');
           return;
         }
-        const firstDue = !internal && type === 'expense' && (n > 1 || method === 'credito') ? val('firstDue') || '' : '';
-        rememberCard(draft.last4, { bank: val('bank')?.trim(), due: firstDue });
+        const firstDue = !internal && type === 'expense' ? val('firstDue') || '' : '';
+        rememberCard(draft.last4, { bank: val('bank')?.trim(), due: method === 'credito' || n > 1 ? firstDue : '' });
         const ids = addTransaction({ ...draft, firstDue, installments: n, installmentValue: n > 1 && pmt > 0 ? pmt : null, recurring: n === 1 && f.querySelector('#f-rec')?.checked, source: extracted ? 'print' : 'manual' });
         sheet.close();
         const what = internal ? 'Transferência' : type === 'income' ? 'Ganho' : 'Gasto';
@@ -380,6 +379,8 @@ export function prefillFromExtract(x) {
     bank: x.card && (x.card.bank || x.card.brand) ? [x.card.bank, x.card.brand].filter(Boolean).join(' · ') : x.app || '',
     merchant: x.merchant || '',
     location: x.location || '',
+    // vencimento lido no print (boleto, conta): o gasto entra nessa data
+    firstDue: x.dueDate && x.dueDate > (x.date || '') ? x.dueDate : '',
     installments: x.installments || 1,
     installmentValue: x.installments > 1 && x.installmentValue && Math.abs(x.installmentValue * x.installments - x.amount) > 0.05 ? x.installmentValue : '',
   };
@@ -460,7 +461,7 @@ export function saveFromPrint(data) {
     amount,
     description: p.description || p.merchant || getCategory(p.category).name,
     card: p.last4 ? cardText(p.last4, info?.bank || p.bank) : p.card,
-    firstDue: p.type === 'expense' && (n > 1 || p.method === 'credito') ? dueFor(p.date, info) : '',
+    firstDue: p.type !== 'expense' ? '' : p.firstDue || (n > 1 || p.method === 'credito' ? dueFor(p.date, info) : ''),
     installments: n,
     installmentValue: n > 1 && p.installmentValue > 0 ? +p.installmentValue : null,
     source: 'print',

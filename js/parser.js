@@ -30,6 +30,8 @@ function methodFrom(t) {
   if (/\bdebito\b|\bdeb\b/.test(t)) return 'debito';
   if (/\bcartao\b/.test(t)) return 'credito';
   if (/\bdebito\b|\bdeb\b/.test(t)) return 'debito';
+  // boleto (muitos trazem também um QR Pix): linha digitável/código de barras decidem
+  if (/\bboleto\b|linha digitavel|codigo de barras/.test(t)) return 'boleto';
   if (/\bpix\b/.test(t)) return 'pix';
   if (/\bboleto\b/.test(t)) return 'boleto';
   if (/\bdinheiro\b|\bespecie\b/.test(t)) return 'dinheiro';
@@ -227,7 +229,11 @@ export function parseReceiptText(text, today = new Date()) {
   // carteiras digitais (Mercado Pago, 99Pay, PicPay) sem forma explícita: saiu do saldo, tratamos como Pix
   const method = methodFrom(t) || (inst && inst.n > 1 ? 'credito' : null) || (/mercado pago|99pay|99 pay|picpay|\b99\b/.test(t) ? 'pix' : null);
   const card = findCard(original);
-  const date = findDate(original, today);
+  // vencimento (boleto, conta, fatura): fica à parte; a data do gasto é outra que apareça, ou hoje
+  const dueLine = lines.find((l) => /\b(vencimento|vence em|vence dia|pagar ate|pague ate|data limite)\b/.test(normalize(l)));
+  const dueIdx = dueLine ? lines.indexOf(dueLine) : -1;
+  const dueDate = dueLine ? findDate(dueLine, today) || findDate(lines[dueIdx + 1] || '', today) : null;
+  const date = findDate(dueDate ? lines.filter((l, k) => k !== dueIdx && !(k === dueIdx + 1 && !findDate(dueLine, today))).join('\n') : original, today);
   const time = findTime(original);
   const income = flowDirection(t) === 'income';
   const app = findApp(t);
@@ -248,6 +254,7 @@ export function parseReceiptText(text, today = new Date()) {
     merchant,
     description: counterpartLabel || merchant || null,
     date,
+    dueDate,
     time,
     method,
     card,
