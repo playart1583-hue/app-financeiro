@@ -197,7 +197,7 @@ export function parseReceiptText(text, today = new Date()) {
     // "Pix para Maria" / "Pix de João" deixa o extrato mais claro do que só o nome
     if (merchant && /\b(pix|transferencia|transferiu)\b/.test(t)) {
       const what = /\bpix\b/.test(t) ? 'Pix' : 'Transferência';
-      counterpartLabel = /\b(recebeu|recebid[oa])\b/.test(t) ? `${what} de ${merchant}` : `${what} para ${merchant}`;
+      counterpartLabel = flowDirection(t) === 'income' ? `${what} de ${merchant}` : `${what} para ${merchant}`;
     }
   }
   if (!merchant) {
@@ -213,7 +213,7 @@ export function parseReceiptText(text, today = new Date()) {
   const card = findCard(original);
   const date = findDate(original, today);
   const time = findTime(original);
-  const income = /\b(recebid[oa]|voce recebeu|recebeu um pix|credito em conta|deposito recebido|pix recebido|transferencia recebida|caiu na sua conta|entrou na sua conta)\b/.test(t) && !/\b(voce enviou|pix enviado|voce pagou|pagamento enviado)\b/.test(t);
+  const income = flowDirection(t) === 'income';
   const app = findApp(t);
   if (!merchant && app === '99' && /corrida|viagem/.test(t)) merchant = 'Corrida 99';
   const desc = merchant || lines[0] || '';
@@ -270,13 +270,73 @@ export function findApp(normalizedText) {
 }
 
 /** "Você enviou um Pix de R$ 50,00 para Maria Souza" -> "Maria Souza"; "Você recebeu R$ 20 de João" -> "João". */
+const APP_PREFIX = /^(?:mercado pago|99pay|99 pay|99|nubank|banco inter|inter|picpay|ita[uú]|bradesco|santander|caixa|c6 bank|c6|pagbank|neon|btg|banco do brasil)\s+/i;
+
 function notificationCounterpart(text) {
+  // "Maria Souza te enviou R$ 20" / "Ana enviou um Pix de R$ 40 para você"
+  const sender = text.match(/((?:[A-ZÀ-Ú][\wÀ-ú]*\s+){0,4}[A-ZÀ-Ú][\wÀ-ú]*)\s+(?:te\s+(?:enviou|enviaram|mandou|transferiu|pagou)|(?:enviou|transferiu|mandou)\b[^.!\n]{0,40}?\s(?:para|pra)\s+voc[eê])/);
+  if (sender) {
+    let v = sender[1].trim();
+    while (APP_PREFIX.test(`${v} `)) v = `${v} `.replace(APP_PREFIX, '').trim();
+    v = v.replace(/^(?:pix|transfer[eê]ncia)\s+(?:recebid[oa]|enviad[oa])\s*/i, '').trim();
+    if (v && !/^(voc[eê]|pix)$/i.test(v)) return v;
+  }
   const m =
-    text.match(/(?:enviou|enviad[oa]|transferiu|pagou|pagamento(?: de [^\n]*?)?)\b[^\n]*?\b(?:para|a|em)\s+([A-ZÀ-Ú0-9][\wÀ-ú&*.' -]{1,40}?)(?=\s*(?:[.,!\n]|$| via | com | no valor| às | as | em \d| - ))/i) ||
-    text.match(/(?:recebeu|recebid[oa])\b[^\n]*?\bde\s+([A-ZÀ-Ú0-9][\wÀ-ú&*.' -]{1,40}?)(?=\s*(?:[.,!\n]|$| via | com | às | as | - ))/i);
+    text.match(/recebid[oa] por\s+([A-ZÀ-Ú][\wÀ-ú&*.' -]{1,40}?)(?=\s*(?:[.,!\n]|$|[Rr]\$| via | com | no valor| às | as | - ))/) ||
+    text.match(/(?:enviou|enviad[oa]|transferiu|transfer[eê]ncia|realizad[oa]|pagou|pagamento(?: de [^\n]*?)?)\b[^\n]*?\b(?:para|a|em)\s+([A-ZÀ-Ú0-9][\wÀ-ú&*.' -]{1,40}?)(?=\s*(?:[.,!\n]|$| via | com | no valor| às | as | em \d| - ))/i) ||
+    text.match(/(?:recebeu|recebid[oa])\b[^\n]*?\bde\s+([A-ZÀ-Ú0-9][\wÀ-ú&*.' -]{1,40}?)(?=\s*(?:[.,!\n]|$| via | com | às | as | - ))/i) ||
+    text.match(/((?:[A-ZÀ-Ú][\wÀ-ú]*\s+){0,4}[A-ZÀ-Ú][\wÀ-ú]*)\s+(?:j[aá]\s+)?recebeu\s+(?:o\s+|a\s+)?(?:seu|sua)\b/);
   if (!m) return null;
-  const v = m[1].trim();
-  return /^(r\$|\d)/i.test(v) ? null : v;
+  let v = m[1].trim();
+  while (APP_PREFIX.test(`${v} `)) v = `${v} `.replace(APP_PREFIX, '').trim();
+  v = v.replace(/^(?:pix|transfer[eê]ncia)\s+(?:recebid[oa]|enviad[oa])\s*/i, '').trim();
+  return !v || /^(r\$|\d|voc[eê]\b)/i.test(v) ? null : v;
+}
+
+// Entrada x saída nas notificações. Frases de saída que contêm "recebeu" (quem recebeu foi o outro) vêm antes,
+// e quando há frases dos dois lados vale a que aparece primeiro (o título da notificação).
+const OUT_FLOW = /\b(voce (?:enviou|transferiu|pagou|fez um pix|fez uma transferencia)|pix enviado|pix realizado|pix feito|transferencia (?:enviada|realizada|feita|efetuada|concluida)|pagamento (?:realizado|aprovado|efetuado|enviado|feito|concluido)|compra (?:aprovada|realizada|no)|(?:ja )?recebeu (?:o |a )?(?:seu|sua)|recebid[oa] por|enviad[oa] (?:para|com sucesso)|seu pix (?:para|de r)|sua transferencia|debito|debitad[oa]|saque|saiu da sua conta|corrida|viagem)/;
+const IN_FLOW = /\b(te (?:enviou|enviaram|mandou|transferiu|pagou)|(?:enviou|transferiu|mandou|pagou)\b[^.!\n]{0,40}? (?:para|pra) (?:voce|sua conta)|voce recebeu|recebeu (?:um|uma|r\$|\d)|pix recebido|transferencia recebida|dinheiro recebido|pagamento recebido|recebimento|recebid[oa](?! por)|credito em conta|creditad[oa]|deposito|caiu na sua conta|entrou na sua conta|chegou (?:um|uma|dinheiro|r\$|o pix|seu pix)|estorno|estornad[oa]|reembolso|devolucao|devolvid[oa]|cashback|rendeu|rendimento)/;
+
+/** 'income' | 'expense' pelo texto (já normalizado) de uma notificação ou comprovante. */
+export function flowDirection(t) {
+  const o = t.match(OUT_FLOW);
+  const i = t.match(IN_FLOW);
+  if (o && i) return o.index <= i.index ? 'expense' : 'income';
+  return i ? 'income' : 'expense';
+}
+
+/**
+ * "Molde" de uma notificação: o texto sem valores, datas, horários e o nome de quem enviou/recebeu.
+ * Serve para o app aprender quando você corrige receita/despesa e acertar as próximas iguais.
+ */
+export function notificationTemplate(text, name = '') {
+  const original = String(text || '');
+  const n = normalize(String(name || '')).trim();
+  // nomes de pessoas e lojas vêm com inicial maiúscula: ficam de fora, menos as palavras que dizem o que aconteceu
+  const words = original
+    .trim()
+    .replace(APP_PREFIX, '')
+    .split(/\s+/)
+    .filter((w) => !/^[A-ZÀ-Ú]/.test(w) || TEMPLATE_WORDS.test(normalize(w).replace(/[^a-z]/g, '')))
+    .join(' ');
+  let t = normalize(words);
+  if (n.length > 2) t = t.split(n).join(' ');
+  const app = findApp(normalize(original));
+  const body = t
+    .replace(/r\$/g, ' ')
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 1)
+    .join(' ');
+  return [app ? normalize(app) : '', body].filter(Boolean).join(' ');
+}
+const TEMPLATE_WORDS = /^(pix|ted|doc|transferencia|voce|seu|sua|recebido|recebida|recebeu|enviado|enviada|enviou|pagamento|pago|paga|compra|aprovado|aprovada|realizado|realizada|dinheiro|chegou|novo|nova|deposito|estorno|saque|debito|credito|cartao|fatura|rendimento|cashback|corrida|viagem|transferido|transferida|parcela)$/;
+
+/** Chaves usadas para lembrar a correção: o molde inteiro e o começo dele (app + título). */
+export function templateKeys(text, name = '') {
+  const tpl = notificationTemplate(text, name);
+  return tpl ? [tpl, `^${tpl.split(' ').slice(0, 5).join(' ')}`] : [];
 }
 
 /**

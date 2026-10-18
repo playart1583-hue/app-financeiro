@@ -32,6 +32,7 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 | Ocultar valores, tema claro/escuro, backup (exportar/importar JSON) | Ajustes |
 | **Botão +** com todas as entradas: preencher à mão, ler print, documento ou fatura, colar texto, várias notificações, contrato de empréstimo | Barra inferior |
 | **Colar texto**: notificações, linhas de extrato, texto de fatura ou anotações ("almoço 32,90 débito", uma por linha) viram lançamentos para conferir | + → *Colar texto* |
+| **Entrada × saída nas notificações**: entende "você enviou", "te enviou", "recebeu seu Pix", "recebido por" etc. Se algum entrar do lado errado, troque receita/despesa no lançamento: o app aprende o modelo daquela notificação e oferece corrigir as parecidas | Extrato → tocar no lançamento |
 | **Bloqueio por digital** (app Android): pede digital, rosto ou senha do celular ao abrir e ao voltar depois de 30 s | Ajustes → *Bloqueio por digital* |
 
 ## App Android (APK)

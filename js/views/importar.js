@@ -1,6 +1,7 @@
 // Notificações (Mercado Pago, 99, bancos): várias de uma vez por print ou texto, e registro automático
 // quando o texto chega por automação do celular ou pelo menu "Compartilhar".
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, defaultClassification, getCategory } from '../categories.js';
+import { flipPatch, learnedType } from '../learn.js';
 import { parseNotifications, parseReceiptText } from '../parser.js';
 import { analyzeNotifications } from '../receipt.js';
 import { addTransaction, deleteTransaction, findDuplicate, getState } from '../store.js';
@@ -11,7 +12,10 @@ import { openReader } from './reader.js';
 /** Converte um item lido em rascunho de lançamento. */
 function draftOf(x) {
   const p = prefillFromExtract(x);
-  return { ...p, description: p.description || getCategory(p.category).name, installments: 1, source: 'notificacao' };
+  const d = { ...p, description: p.description || getCategory(p.category).name, installments: 1, source: 'notificacao', raw: x.raw || '' };
+  // você já corrigiu uma notificação igual a esta: segue a correção
+  const learned = learnedType(d.raw, d.merchant);
+  return learned && learned !== d.type ? { ...d, ...flipPatch(d, learned) } : d;
 }
 
 export function openNotificationsImport({ file, text } = {}) {
@@ -78,7 +82,7 @@ export function ingestExternalText(text, { silent = false } = {}) {
   let items = parseNotifications(text);
   if (!items.length) {
     const one = parseReceiptText(text);
-    if (one.amount) items = [one];
+    if (one.amount) items = [{ ...one, raw: text }];
   }
   // vindo das automações, texto sem valor é ignorado em silêncio (o diagnóstico em Ajustes mostra o que chegou)
   if (!items.length) return silent ? null : openNotificationsImport({ text });

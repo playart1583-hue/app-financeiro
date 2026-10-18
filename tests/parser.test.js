@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findCard, parseAmount, parseQuickEntry, parseReceiptText, parseSerasaText } from '../js/parser.js';
+import { findCard, parseAmount, parseNotifications, parseQuickEntry, parseReceiptText, parseSerasaText, templateKeys } from '../js/parser.js';
 import { categorize } from '../js/categories.js';
 
 const today = new Date(2026, 9, 18);
@@ -65,7 +65,7 @@ test('categorização automática', () => {
   assert.equal(categorize('rendimento CDB', 'income'), 'investimentos');
 });
 
-import { parseLoanText, parseNotifications } from '../js/parser.js';
+import { parseLoanText } from '../js/parser.js';
 
 test('notificações do Mercado Pago, 99 e bancos', () => {
   const list = parseNotifications('Mercado Pago\nVocê enviou um Pix de R$ 50,00 para Maria Souza.\n\n99\nSua corrida foi paga. Total R$ 18,90 às 08:15\n\n99Pay\nPix recebido: você recebeu R$ 120,00 de João Lima', today);
@@ -90,4 +90,29 @@ test('simulação de consignado', () => {
   const c = parseLoanText('Simulação consignado INSS\nVocê recebe R$ 3.000,00\n84 parcelas de R$ 64,90\nTaxa 1,80% ao mês\nCET 1,95% ao mês', today);
   assert.deepEqual([c.kind, c.released, c.n, c.pmt], ['consignado', 3000, 84, 64.9]);
   assert.ok(Math.abs(c.statedRate - 0.018) < 1e-9);
+});
+
+test('notificações: entrada x saída em frases diferentes', () => {
+  const cases = [
+    ['Mercado Pago Pix enviado Você enviou R$ 50,00 para Maria Souza', 'expense', 'Pix para Maria Souza'],
+    ['Mercado Pago Você recebeu um Pix de R$ 50,00 de João', 'income', 'Pix de João'],
+    ['Mercado Pago João Silva te enviou R$ 20,00', 'income', 'João Silva'],
+    ['Mercado Pago Pix enviado Maria Souza recebeu seu Pix de R$ 30,00', 'expense', 'Pix para Maria Souza'],
+    ['Mercado Pago Seu Pix foi recebido por Maria R$ 30,00', 'expense', 'Pix para Maria'],
+    ['Mercado Pago Transferência realizada R$ 15,00 para Ana', 'expense', 'Transferência para Ana'],
+    ['Mercado Pago Ana Paula enviou um Pix de R$ 40,00 para você', 'income', 'Pix de Ana Paula'],
+    ['Mercado Pago Chegou um Pix de R$ 12,00', 'income', null],
+    ['Nubank Compra aprovada R$ 12,90 em PADARIA', 'expense', 'PADARIA'],
+  ];
+  for (const [text, type, description] of cases) {
+    const [r] = parseNotifications(text, today);
+    assert.deepEqual([r.type, r.description], [type, description], text);
+  }
+});
+
+test('molde da notificação ignora valor, data e nome', () => {
+  const a = templateKeys('Mercado Pago João Silva te enviou R$ 20,00\n18/10/2026 19:20', 'João Silva');
+  const b = templateKeys('Mercado Pago Ana te enviou R$ 7,50\n19/10/2026 08:02', 'Ana');
+  assert.deepEqual(a, b);
+  assert.equal(a[0], 'mercado pago te enviou');
 });

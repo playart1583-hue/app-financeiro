@@ -76,11 +76,34 @@ function purgeDemo(s) {
   s.settings.demo = false;
 }
 
+// Recomeço pedido no app Android (versão 1.3.2): os lançamentos registrados com a leitura antiga das
+// notificações (Pix enviado como receita e recebido como despesa) são apagados uma única vez.
+// Ficam só as preferências; uma cópia do que existia fica guardada no aparelho por segurança.
+const RESET_ID = '2026-10-recomeco';
+const isNativeApp = () => Boolean(typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.());
+
+function resetOnce(s) {
+  if (s.settings.resetDone === RESET_ID || !isNativeApp()) return s;
+  const had = s.transactions.length || s.loans.length || s.goals.length || Object.keys(s.budgets).length;
+  if (had) {
+    try {
+      localStorage.setItem('meubolso:antes-do-recomeco', JSON.stringify(s));
+    } catch {
+      /* sem espaço: segue sem a cópia */
+    }
+  }
+  const { name, hideValues, theme, savingsRate, autoRegister, lock } = s.settings;
+  const next = empty();
+  next.settings = { ...next.settings, name, hideValues, theme, savingsRate, autoRegister, ...(lock !== undefined ? { lock } : {}), resetDone: RESET_ID };
+  return next;
+}
+
 export function init() {
   const local = readLocal();
   // o app começa vazio; quem ainda tinha os exemplos de versões antigas fica só com os próprios dados
   state = migrate(local || empty());
   if (state.settings.demo) purgeDemo(state);
+  state = resetOnce(state);
   writeLocal();
   cloud.connect();
   return state;
@@ -125,6 +148,8 @@ export function addTransaction(draft) {
     merchant: draft.merchant || '',
     location: draft.location || '',
     source: draft.source || 'manual',
+    // texto original da notificação: permite aprender quando você corrige receita/despesa
+    ...(draft.raw ? { raw: String(draft.raw).slice(0, 400) } : {}),
     ...(draft.loanId ? { loanId: draft.loanId } : {}),
     createdAt: Date.now(),
   };

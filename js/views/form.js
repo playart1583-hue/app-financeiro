@@ -1,5 +1,6 @@
 // Formulário de lançamento (gasto/ganho), leitura de print e registro rápido por texto.
 import { addTransaction, deleteTransaction, findDuplicate, getState, restoreTransactions, updateTransaction } from '../store.js';
+import { flipAll, learnFlow, similarFlow, swapLabel } from '../learn.js';
 import { CLASSIFICATIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, categorize, defaultClassification, getCategory } from '../categories.js';
 import { analyzeInstallments } from '../finance.js';
 import { cardLabel, parseQuickEntry, parseReceiptText, toISO } from '../parser.js';
@@ -178,6 +179,7 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
       f.addEventListener('change', (e) => {
         if (e.target.name === 'type') {
           const type = radio('type');
+          f.elements.description.value = swapLabel(val('description'), type);
           $('#f-cats').innerHTML = String(html`${catChips(type, type === 'income' ? 'salario' : 'outros')}`);
           userPickedCategory = false;
           const guess = categorize(val('description'), type);
@@ -262,8 +264,26 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
         };
         if (editing) {
           const { amount: _a, ...rest } = draft;
+          const before = { ...editing }; // updateTransaction altera o próprio objeto
           updateTransaction(editId, { ...rest, amount }, { wholeGroup: f.querySelector('#f-group')?.checked });
           sheet.close();
+          // corrigiu receita/despesa de uma notificação: aprende e oferece corrigir as parecidas
+          if (before.source === 'notificacao' && before.type !== type) {
+            learnFlow(before, type);
+            const similar = similarFlow(before, before.type);
+            const label = type === 'income' ? 'receita' : 'despesa';
+            if (similar.length) {
+              return toast(`Corrigido. As próximas notificações iguais entram como ${label}. Há mais ${similar.length} parecida${similar.length > 1 ? 's' : ''} como ${before.type === 'income' ? 'receita' : 'despesa'}.`, {
+                action: `Corrigir ${similar.length > 1 ? 'todas' : ''}`.trim(),
+                onAction: () => {
+                  flipAll(similar, type);
+                  toast(`${similar.length} lançamento${similar.length > 1 ? 's' : ''} corrigido${similar.length > 1 ? 's' : ''} para ${label}`);
+                },
+                timeout: 15000,
+              });
+            }
+            return toast(`Corrigido. As próximas notificações iguais entram como ${label}.`);
+          }
           toast('Lançamento atualizado');
           return;
         }
