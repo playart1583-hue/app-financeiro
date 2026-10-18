@@ -1,7 +1,7 @@
 // Formulário de lançamento (gasto/ganho), leitura de print e registro rápido por texto.
 import { addTransaction, deleteTransaction, findDuplicate, getState, restoreTransactions, updateTransaction } from '../store.js';
 import { markOwnTransfer } from '../transfers.js';
-import { cardInfo, cardText, cycleText, dueFor, findKnownLast4, knownLast4, rememberCard, splitCard } from '../cards.js';
+import { alignCreditToDue, cardInfo, cardText, cycleText, dueFor, findKnownLast4, knownLast4, rememberCard, splitCard, undoAlign } from '../cards.js';
 import { CLASSIFICATIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, categorize, defaultClassification, getCategory } from '../categories.js';
 import { analyzeInstallments } from '../finance.js';
 import { cardLabel, parseQuickEntry, parseReceiptText, toISO } from '../parser.js';
@@ -318,6 +318,9 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
             const pair = markOwnTransfer({ ...before, ...draft, id: editId });
             return toast(pair ? 'Marcado como transferência entre suas contas, junto com a outra ponta. Não conta mais como gasto nem ganho.' : 'Marcado como transferência entre suas contas. Não conta mais como gasto nem ganho.');
           }
+          // colocou o cartão numa compra no crédito: vai para o mês em que a fatura vence
+          const moved = alignCreditToDue();
+          if (moved.length) return toast(`Lançamento atualizado e levado para o vencimento da fatura (${dateBR(moved[0].to)})`, { action: 'Desfazer', onAction: () => undoAlign(moved) });
           toast('Lançamento atualizado');
           return;
         }
