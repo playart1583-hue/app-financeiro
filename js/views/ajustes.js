@@ -2,6 +2,7 @@ import { monthlyToAnnual } from '../finance.js';
 import { currentEngine } from '../receipt.js';
 import { cloud, exportJSON, getApiKey, importJSON, loadDemo, resetAll, setApiKey, updateSettings } from '../store.js';
 import { html, icon, pct, toast } from '../ui.js';
+import { isNativeApp, nativeReader, notificationAccess } from '../native.js';
 
 const SYNC = {
   local: 'Os dados ficam só neste aparelho. Faça backup de vez em quando.',
@@ -11,6 +12,7 @@ const SYNC = {
 };
 
 async function saveFile(name, text) {
+  if (nativeReader) return nativeReader.shareFile({ name, text, mimeType: 'application/json' });
   const downloads = await window.claude?.use?.('downloads');
   if (downloads) {
     await downloads.save({ filename: name, data: text });
@@ -22,6 +24,20 @@ async function saveFile(name, text) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function nativeSection(st) {
+  return html`<section class="card" id="auto"><h2 class="card-title">${icon('bell')} Registro automático das notificações</h2>
+    <p class="hint">Com o acesso liberado, o Meu Bolso lê as notificações com valor em reais do Mercado Pago, 99, 99Pay, Nubank, Inter, Itaú, Bradesco, Santander, Caixa, BB, PicPay, C6, PagBank e carteiras digitais, e registra sozinho. Nada sai do seu celular.</p>
+    <p class="status" id="nat-status">Verificando…</p>
+    <div class="btn-row"><button type="button" class="btn primary sm" id="nat-open">${icon('bell')} Liberar acesso às notificações</button><button type="button" class="btn sm" id="nat-info">Configurações do app</button></div>
+    <ol class="bullets">
+      <li>Toque em <b>Liberar acesso às notificações</b>, encontre <b>Meu Bolso</b> e ative.</li>
+      <li>Se o Android avisar que é uma <b>configuração restrita</b> (Android 13 ou mais novo, em apps instalados fora da Play Store): toque em <b>Configurações do app</b>, no menu ⋮ do canto superior e em <b>Permitir configurações restritas</b>. Depois volte e ative o acesso.</li>
+      <li>Também dá para usar <b>Compartilhar → Meu Bolso</b> em prints, textos, PDF de fatura, CSV, OFX e planilhas.</li>
+    </ol>
+    <label class="check"><input type="checkbox" id="auto-reg" ${st.autoRegister !== false ? 'checked' : ''}> <span>Registrar sozinho (repetidos sempre pedem confirmação)</span></label>
+  </section>`;
 }
 
 export default {
@@ -49,7 +65,9 @@ export default {
         </form>
       </section>
 
-      <section class="card" id="auto"><h2 class="card-title">${icon('bell')} Mercado Pago, 99 e notificações</h2>
+      ${isNativeApp
+        ? nativeSection(st)
+        : html`<section class="card" id="auto"><h2 class="card-title">${icon('bell')} Mercado Pago, 99 e notificações</h2>
         <p class="hint">Mercado Pago e 99 não oferecem uma API para apps pessoais lerem seu extrato (a API do Mercado Pago é para quem vende e exige servidor próprio), e nenhum app de navegador consegue ler as notificações do celular sozinho. Estes são os caminhos que funcionam:</p>
         <ol class="bullets">
           <li><b>Print ou texto:</b> em Início → <b>Notificações</b>, envie um print da central de notificações ou da tela "Atividade" do app. Várias movimentações de uma vez.</li>
@@ -61,7 +79,7 @@ export default {
           ? html`<p class="status info">${icon('info')}<span>O registro automático precisa do app publicado num endereço próprio (por exemplo, GitHub Pages, veja o README). Dentro do app da Claude use print ou texto.</span></p>`
           : html`<label class="field"><span>Endereço para a automação</span><div class="qe-row"><input id="auto-url" readonly value="${location.origin + location.pathname}?registrar="><button type="button" class="btn sm" id="copy-url">${icon('copy')} Copiar</button></div></label>`}
         <label class="check"><input type="checkbox" id="auto-reg" ${st.autoRegister !== false ? 'checked' : ''}> <span>Registrar sozinho o que chegar por automação ou compartilhamento (repetidos sempre pedem confirmação)</span></label>
-      </section>
+      </section>`}
 
       <section class="card"><h2 class="card-title">${icon('shield')} Seus dados</h2>
         <p class="hint" id="sync">${SYNC[cloud.status]}</p>
@@ -88,6 +106,19 @@ export default {
       updateSettings({ name: f.elements.name.value.trim(), theme: f.querySelector('[name=theme]:checked').value, hideValues: f.hideValues.checked, savingsRate: rate >= 0 && rate < 0.2 ? rate : state.settings.savingsRate });
       toast('Ajustes salvos');
     });
+    if (nativeReader) {
+      const showAccess = () =>
+        notificationAccess().then((on) => {
+          const el = root.querySelector('#nat-status');
+          if (!el) return;
+          el.className = `status ${on ? 'info' : 'error'}`;
+          el.textContent = on ? 'Acesso liberado: as notificações estão sendo registradas.' : 'Acesso ainda não liberado.';
+        });
+      showAccess();
+      document.addEventListener('visibilitychange', showAccess, { once: true });
+      root.querySelector('#nat-open').addEventListener('click', () => nativeReader.openSettings());
+      root.querySelector('#nat-info').addEventListener('click', () => nativeReader.openAppInfo());
+    }
     root.querySelector('#auto-reg').addEventListener('change', (e) => {
       updateSettings({ autoRegister: e.target.checked });
       toast(e.target.checked ? 'Registro automático ligado' : 'Vou pedir confirmação antes de registrar');

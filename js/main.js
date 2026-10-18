@@ -5,6 +5,7 @@ import { closeAllSheets, html, icon } from './ui.js';
 import { openPrintSheet, openTxForm } from './views/form.js';
 import { ingestExternalText, openNotificationsImport } from './views/importar.js';
 import { openFileImport } from './views/arquivo.js';
+import { isNativeApp, startNative } from './native.js';
 import inicio from './views/home.js';
 import extrato from './views/extrato.js';
 import relatorios from './views/relatorios.js';
@@ -136,18 +137,29 @@ async function handleIncoming() {
     const file = fileRes ? new File([await fileRes.blob()], decodeURIComponent(fileRes.headers.get('x-name') || 'arquivo'), { type: fileRes.headers.get('content-type') || '' }) : null;
     await cache.delete('share/file');
     await cache.delete('share/text');
-    // print vai para notificações (várias movimentações por imagem); PDF, CSV, OFX etc. para a importação de arquivos
-    if (file && file.type.startsWith('image/')) openNotificationsImport({ file });
-    else if (file) openFileImport({ files: [file], mode: /fatura|invoice/i.test(file.name) ? 'fatura' : 'extrato' });
-    else if (sharedText) ingestExternalText(sharedText);
-    else openPrintSheet();
+    routeShared({ text: sharedText, files: file ? [file] : [] });
   } catch {
     openPrintSheet();
   }
 }
+
+/** Decide o destino do que chegou pelo Compartilhar (navegador ou app Android). */
+function routeShared({ text, files }) {
+  const images = files.filter((f) => f.type.startsWith('image/'));
+  const docs = files.filter((f) => !f.type.startsWith('image/'));
+  // prints vão para notificações (várias movimentações por imagem); PDF, CSV, OFX e planilhas para a importação de arquivos
+  if (docs.length) openFileImport({ files: docs, mode: /fatura|invoice/i.test(docs[0].name) ? 'fatura' : 'extrato' });
+  else if (images.length > 1) openFileImport({ files: images });
+  else if (images.length) openNotificationsImport({ file: images[0] });
+  else if (text) ingestExternalText(text);
+  else openPrintSheet();
+}
 handleIncoming();
 
-// Instalação no celular (fora do Artifact). Service worker só funciona em http(s) próprio.
-if ('serviceWorker' in navigator && !window.claude && location.protocol.startsWith('http')) {
+// App Android: notificações de bancos/carteiras e menu Compartilhar chegam pela ponte nativa
+startNative({ onText: ingestExternalText, onShared: routeShared });
+
+// Instalação no celular (fora do Artifact e do app Android). Service worker só funciona em http(s) próprio.
+if ('serviceWorker' in navigator && !window.claude && !isNativeApp && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }

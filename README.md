@@ -31,6 +31,27 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 | Sugestões automáticas: onde cortar, gastos pequenos, arredondamento para o cofrinho, reserva de emergência, dívida mais cara, plano de quitação | Início e Planejar → Dicas |
 | Ocultar valores, tema claro/escuro, backup (exportar/importar JSON) | Ajustes |
 
+## App Android (APK)
+
+O app também é empacotado como APK com o [Capacitor](https://capacitorjs.com). No Android ele ganha dois recursos que o navegador não tem:
+
+- **Registro automático das notificações** do Mercado Pago, 99, 99Pay, Nubank, Inter, Itaú, Bradesco, Santander, Caixa, BB, PicPay, C6, PagBank e carteiras digitais (só as que têm valor em R$). É preciso liberar em *Ajustes → Registro automático das notificações*. Em Android 13+ com APK instalado fora da Play Store, antes é preciso permitir "configurações restritas" nas informações do app.
+- **Compartilhar → Meu Bolso** para prints, textos, PDF de fatura, CSV, OFX e planilhas.
+
+Instalar: copie o `meu-bolso.apk` para o celular, abra e permita "instalar apps desconhecidos" para o app que você usou para abrir o arquivo.
+
+Gerar de novo:
+
+```bash
+npm install
+npm run android:apk        # precisa de JDK 21 e Android SDK (ANDROID_HOME)
+# saída: android/app/build/outputs/apk/release/app-release.apk
+```
+
+Ou pelo GitHub: *Actions → APK Android → Run workflow*; o APK fica em *Artifacts*.
+
+A chave de assinatura está em `android/keystore/` (o repositório é privado). Todas as versões precisam ser assinadas com ela para atualizar por cima sem perder os dados; se o repositório ficar público, gere uma chave nova e guarde-a fora do Git. Ao lançar uma versão nova, aumente `versionCode` em `android/app/build.gradle`.
+
 ## Como rodar
 
 Não precisa instalar nada nem compilar:

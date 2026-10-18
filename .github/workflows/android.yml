@@ -1,0 +1,31 @@
+# Gera o APK do Meu Bolso a cada push nesta branch (ou manualmente em Actions > "APK Android" > Run workflow).
+# O arquivo fica em Actions > execução > Artifacts > meu-bolso-apk.
+name: APK Android
+
+on:
+  push:
+    branches: [main, ccr-2b28733f-3fo937]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm test
+      - run: npm run android:sync
+      - run: ./gradlew assembleRelease --no-daemon
+        working-directory: android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meu-bolso-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
