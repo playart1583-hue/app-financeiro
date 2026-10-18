@@ -71,14 +71,12 @@ jobs:
           tag_name: apk-v${{ steps.apk.outputs.version }}-${{ github.run_number }}
           name: Meu Bolso ${{ steps.apk.outputs.version }} (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
-          files: |
-            ${{ steps.apk.outputs.file }}
-            ${{ steps.apk.outputs.full }}
+          # só a variante leve vai para Releases: a "completo" é bloqueada pelo Play Protect quando baixada no celular
+          # e fica apenas nos Artifacts da execução, para instalar pelo computador
+          files: ${{ steps.apk.outputs.file }}
+          make_latest: true
           body: |
             **Baixe o `${{ steps.apk.outputs.file }}`** no celular, abra e permita instalar apps desta fonte.
             O registro automático das notificações é feito com o MacroDroid (passo a passo em Ajustes no app).
-
-            `${{ steps.apk.outputs.full }}` lê as notificações sozinho, mas o Play Protect bloqueia a instalação
-            dele quando baixado da internet no Brasil. Use só se for instalar pelo computador (adb).
 
             Gerado a partir de ${{ github.ref_name }} (${{ github.sha }}).

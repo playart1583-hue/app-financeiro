@@ -36,7 +36,7 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 O app também é empacotado como APK com o [Capacitor](https://capacitorjs.com), em duas variantes (mesmo app, mesma assinatura — dá para trocar de uma para a outra sem perder dados):
 
 - **`meu-bolso-X.apk` (leve, recomendada):** instala normalmente fora da Play Store. O registro automático das notificações é feito com o **MacroDroid** (Play Store), que repassa cada notificação para o Meu Bolso pelo broadcast `br.com.meubolso.app.REGISTRAR` (extra `texto`), sem abrir o app. O passo a passo está em *Ajustes*.
-- **`meu-bolso-X-completo.apk`:** o próprio app lê as notificações do Mercado Pago, 99, 99Pay e bancos. **No Brasil, o Google Play Protect bloqueia a instalação** de APKs baixados da internet que pedem acesso às notificações; essa variante serve para instalar via computador (`adb install`) ou para uma futura publicação na Play Store.
+- **`meu-bolso-X-completo.apk`** (só nos *Artifacts* da execução do Actions, não em Releases): o próprio app lê as notificações do Mercado Pago, 99, 99Pay e bancos. **No Brasil, o Google Play Protect bloqueia a instalação** de APKs baixados da internet que pedem acesso às notificações; essa variante serve para instalar via computador (`adb install`) ou para uma futura publicação na Play Store.
 
 Nas duas: **Compartilhar → Meu Bolso** para prints, textos, PDF de fatura, CSV, OFX e planilhas.
 
