@@ -17,7 +17,7 @@ public final class NotificationStore {
         void onNotification(JSONObject item);
     }
 
-    /** Preenchido pelo plugin quando o app está aberto, para registrar na hora. */
+    /** Preenchido pelo plugin quando o app está aberto: avisa que há item novo na fila. */
     public static volatile Listener listener;
 
     private NotificationStore() {}
@@ -38,15 +38,38 @@ public final class NotificationStore {
             JSONObject other = list.optJSONObject(i);
             if (other != null && other.optString("key").equals(item.optString("key")) && other.optString("text").equals(item.optString("text"))) return;
         }
-        Listener l = listener;
-        if (l != null) {
-            l.onNotification(item);
-            return;
-        }
+        // sempre passa pela fila (nada se perde se o app estiver em segundo plano); com o app aberto, avisa para buscar já
         list.put(item);
         JSONArray trimmed = new JSONArray();
         for (int i = Math.max(0, list.length() - MAX); i < list.length(); i++) trimmed.put(list.opt(i));
-        prefs.edit().putString(KEY, trimmed.toString()).apply();
+        prefs.edit().putString(KEY, trimmed.toString()).commit();
+        Listener l = listener;
+        if (l != null) l.onNotification(item);
+    }
+
+    private static final String LOG = "diagnostico";
+
+    /** Últimas entregas recebidas das automações (para o diagnóstico em Ajustes). */
+    public static synchronized void log(Context context, JSONObject entry) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        JSONArray list;
+        try {
+            list = new JSONArray(prefs.getString(LOG, "[]"));
+        } catch (JSONException e) {
+            list = new JSONArray();
+        }
+        list.put(entry);
+        JSONArray trimmed = new JSONArray();
+        for (int i = Math.max(0, list.length() - 15); i < list.length(); i++) trimmed.put(list.opt(i));
+        prefs.edit().putString(LOG, trimmed.toString()).apply();
+    }
+
+    public static synchronized JSONArray readLog(Context context) {
+        try {
+            return new JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(LOG, "[]"));
+        } catch (JSONException e) {
+            return new JSONArray();
+        }
     }
 
     public static synchronized JSONArray takeAll(Context context) {

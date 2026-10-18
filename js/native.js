@@ -43,7 +43,8 @@ export function startNative({ onText, onShared }) {
       /* nada compartilhado */
     }
   };
-  nativeReader.addListener('notification', ({ item }) => onText(notificationToText(item)));
+  // o aviso só diz que chegou algo; a leitura é sempre pela fila, para nada se perder
+  nativeReader.addListener('notification', drain);
   nativeReader.addListener('shared', shared);
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && drain());
   drain();
@@ -66,5 +67,15 @@ export async function nativeFeatures() {
     return await nativeReader.features();
   } catch {
     return { listener: false };
+  }
+}
+
+/** Últimas entregas do MacroDroid/Tasker (diagnóstico). */
+export async function automationLog() {
+  if (!nativeReader?.automationLog) return [];
+  try {
+    return (await nativeReader.automationLog()).items || [];
+  } catch {
+    return [];
   }
 }

@@ -101,6 +101,17 @@ public class NotificationReaderPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void automationLog(PluginCall call) {
+        JSObject ret = new JSObject();
+        try {
+            ret.put("items", new JSArray(NotificationStore.readLog(getContext()).toString()));
+        } catch (JSONException e) {
+            ret.put("items", new JSArray());
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
     public void getPending(PluginCall call) {
         JSObject ret = new JSObject();
         try {

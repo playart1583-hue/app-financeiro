@@ -585,3 +585,9 @@ p.pill { white-space: normal; display: inline; line-height: 1.6; }
 .lock-title { margin: 6px 0 0; font: 800 22px var(--font-num); }
 .lock-msg { margin: 0 0 8px; opacity: 0.9; }
 .lock .btn { background: #ffffff; color: #0a6b3c; border-color: #ffffff; min-width: 200px; }
+
+.diag-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.diag-list li { padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.diag-list code { font-size: 12px; overflow-wrap: anywhere; }
+.manual { margin: 12px 0 4px; }
+.manual summary { cursor: pointer; font-weight: 800; color: var(--muted); font-size: 13px; padding: 4px 0; }

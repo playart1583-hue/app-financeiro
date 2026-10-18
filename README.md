@@ -38,7 +38,7 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 
 O app também é empacotado como APK com o [Capacitor](https://capacitorjs.com), em duas variantes (mesmo app, mesma assinatura — dá para trocar de uma para a outra sem perder dados):
 
-- **`meu-bolso-X.apk` (leve, recomendada):** instala normalmente fora da Play Store. O registro automático das notificações é feito com o **MacroDroid** (Play Store), que repassa cada notificação para o Meu Bolso pelo broadcast `br.com.meubolso.app.REGISTRAR` (extra `texto`), sem abrir o app. O passo a passo está em *Ajustes*.
+- **`meu-bolso-X.apk` (leve, recomendada):** instala normalmente fora da Play Store. O registro automático das notificações é feito com o **MacroDroid** (Play Store), que repassa cada notificação para o Meu Bolso pelo broadcast `br.com.meubolso.app.REGISTRAR` (extra `texto`), sem abrir o app. A macro pronta está em `automacao/MeuBolso.macro` e em cada Release; o passo a passo e o diagnóstico ficam em *Ajustes*.
 - **`meu-bolso-X-completo.apk`** (só nos *Artifacts* da execução do Actions, não em Releases): o próprio app lê as notificações do Mercado Pago, 99, 99Pay e bancos. **No Brasil, o Google Play Protect bloqueia a instalação** de APKs baixados da internet que pedem acesso às notificações; essa variante serve para instalar via computador (`adb install`) ou para uma futura publicação na Play Store.
 
 Nas duas: **Compartilhar → Meu Bolso** para prints, textos, PDF de fatura, CSV, OFX e planilhas.
@@ -96,7 +96,7 @@ Nenhum dos dois oferece uma API para apps pessoais lerem o extrato: a API do Mer
 
 1. **Print ou texto** (Android e iPhone): Início → *Notificações*.
 2. **Compartilhar** (Android, app instalado na tela inicial): o app aparece no menu Compartilhar e recebe prints e textos.
-3. **Automação** (Android): no MacroDroid, gatilho *Notificação recebida* (Mercado Pago, 99, 99Pay, banco) e ação *Abrir site* com `https://SEU-ENDERECO/?registrar=[not_title] [notification]`. O app registra sozinho e mostra "Desfazer"; repetidos pedem confirmação.
+3. **Automação** (Android): importe no MacroDroid a macro pronta [`automacao/MeuBolso.macro`](automacao/MeuBolso.macro) (também anexada em cada Release): *☰ → Exportar/Importar → Importar*. Ela repassa as notificações do Mercado Pago, 99 e bancos para o app pelo broadcast `br.com.meubolso.app.REGISTRAR` (extra `texto` = `{not_app_name} {not_title} {notification}`); a ação alternativa, desativada, abre `meubolso://registrar?texto=...`. Em *Ajustes → Diagnóstico* o app mostra tudo o que chegou. No navegador, a ação *Abrir site* usa `https://SEU-ENDERECO/?registrar={not_title} {notification}`. O app registra sozinho e mostra "Desfazer"; repetidos pedem confirmação.
 
 A conexão direta com bancos e carteiras exige Open Finance via um agregador autorizado (Pluggy, Belvo), com servidor e contrato: é o próximo passo natural se o protótipo virar produto.
 

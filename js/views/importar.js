@@ -74,13 +74,14 @@ function renderReview(items, sheet) {
  * Texto que chegou de fora (automação do Android, menu Compartilhar).
  * Com o registro automático ligado, salva direto o que for claro e novo; o resto abre para revisão.
  */
-export function ingestExternalText(text) {
+export function ingestExternalText(text, { silent = false } = {}) {
   let items = parseNotifications(text);
   if (!items.length) {
     const one = parseReceiptText(text);
     if (one.amount) items = [one];
   }
-  if (!items.length) return openNotificationsImport({ text });
+  // vindo das automações, texto sem valor é ignorado em silêncio (o diagnóstico em Ajustes mostra o que chegou)
+  if (!items.length) return silent ? null : openNotificationsImport({ text });
   const auto = getState().settings.autoRegister !== false;
   const drafts = items.map(draftOf);
   if (!auto || drafts.some((d) => findDuplicate(d))) return items.length === 1 && !auto ? openTxForm({ prefill: prefillFromExtract(items[0]), extracted: items[0], engine: { label: 'notificação' } }) : openNotificationsImport({ text });

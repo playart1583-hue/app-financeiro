@@ -160,7 +160,7 @@ function routeShared({ text, files }) {
 handleIncoming();
 
 // App Android: notificações de bancos/carteiras e menu Compartilhar chegam pela ponte nativa
-startNative({ onText: ingestExternalText, onShared: routeShared });
+startNative({ onText: (text) => ingestExternalText(text, { silent: true }), onShared: routeShared });
 
 // Instalação no celular (fora do Artifact e do app Android). Service worker só funciona em http(s) próprio.
 if ('serviceWorker' in navigator && !window.claude && !isNativeApp && location.protocol.startsWith('http')) {

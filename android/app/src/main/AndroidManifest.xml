@@ -42,6 +42,22 @@
 
         </activity>
 
+        <!-- Link meubolso://registrar?texto=... (ação "Abrir site" do MacroDroid): guarda e fecha sem abrir o app -->
+        <activity
+            android:name=".RegistrarActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="meubolso" android:host="registrar" />
+            </intent-filter>
+        </activity>
+
         <!-- Registro vindo de automações (MacroDroid, Tasker): broadcast br.com.meubolso.app.REGISTRAR com o extra "texto".
              Fica na fila e é registrado ao abrir o app, sem precisar de acesso às notificações. -->
         <receiver

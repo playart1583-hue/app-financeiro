@@ -2,7 +2,7 @@ import { monthlyToAnnual } from '../finance.js';
 import { currentEngine } from '../receipt.js';
 import { cloud, exportJSON, getApiKey, importJSON, loadDemo, resetAll, setApiKey, updateSettings } from '../store.js';
 import { html, icon, pct, toast } from '../ui.js';
-import { isNativeApp, nativeFeatures, nativeReader, notificationAccess } from '../native.js';
+import { automationLog, isNativeApp, nativeFeatures, nativeReader, notificationAccess } from '../native.js';
 import { confirmIdentity, lockStatus } from '../lock.js';
 
 const SYNC = {
@@ -27,6 +27,11 @@ async function saveFile(name, text) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+const MACRO_URL = 'https://github.com/playart1583-hue/app-financeiro/releases/latest/download/MeuBolso.macro';
+
+const copyList = (rows) =>
+  html`<div class="copy-list">${rows.map(([k, v]) => html`<div class="copy-row"><span>${k}</span><code>${v}</code><button type="button" class="btn ghost sm" data-copy="${v}">${icon('copy')} Copiar</button></div>`)}</div>`;
+
 function nativeSection(st) {
   return html`<section class="card" id="auto"><h2 class="card-title">${icon('bell')} Registro automático das notificações</h2>
     <p class="status" id="nat-status">Verificando…</p>
@@ -39,19 +44,25 @@ function nativeSection(st) {
       </ol>
     </div>
     <div id="nat-macro" hidden>
-      <p class="hint">O Android bloqueia apps instalados fora da Play Store que leem notificações. Por isso o registro automático usa o <b>MacroDroid</b> (grátis na Play Store): ele lê as notificações e repassa para o Meu Bolso, sem abrir o app. Na próxima vez que você abrir o Meu Bolso, tudo já está registrado.</p>
+      <p class="hint">O Android bloqueia apps instalados fora da Play Store que leem notificações. Por isso o registro automático usa o <b>MacroDroid</b> (grátis na Play Store): ele lê as notificações e repassa para o Meu Bolso.</p>
+      <p class="hint"><b>Jeito rápido:</b> baixe a macro pronta e importe no MacroDroid em <b>☰ → Exportar/Importar → Importar</b> (escolha o arquivo <b>MeuBolso.macro</b> em Downloads). Ela já vem com os apps do Mercado Pago, 99 e bancos. Se você montou uma macro à mão, desative a antiga.</p>
+      <a class="btn primary sm" href="${MACRO_URL}">${icon('arrowDown')} Baixar macro pronta</a>
+      <details class="manual"><summary>Montar à mão</summary>
       <ol class="bullets">
-        <li>Instale o <b>MacroDroid</b> pela Play Store e crie uma <b>macro</b>.</li>
-        <li><b>Gatilho:</b> Notificação → <i>Notificação recebida</i>. Escolha os apps (Mercado Pago, 99, seu banco...) e, em texto, <i>contém</i> <code>R$</code>. Permita o acesso às notificações quando o MacroDroid pedir.</li>
-        <li><b>Ação:</b> <i>Enviar intent</i> (Send Intent), com destino <b>Broadcast</b>:
-          <div class="copy-list">
-            ${[['Ação', 'br.com.meubolso.app.REGISTRAR'], ['Pacote', 'br.com.meubolso.app'], ['Nome do extra', 'texto'], ['Valor do extra', '[not_app_name] [not_title] [notification]']].map(
-              ([k, v]) => html`<div class="copy-row"><span>${k}</span><code>${v}</code><button type="button" class="btn ghost sm" data-copy="${v}">${icon('copy')} Copiar</button></div>`,
-            )}
-          </div>
+        <li><b>Gatilho:</b> Notificação → <i>Notificação recebida</i> → escolha os apps (Mercado Pago, 99, seu banco...). Deixe <b>sem filtro de texto</b>: o Meu Bolso já ignora o que não tem valor. Permita o acesso às notificações quando o MacroDroid pedir.</li>
+        <li><b>Ação (opção 1):</b> <i>Enviar intenção</i>. Em <b>Destino</b> escolha <b>Broadcast</b> e preencha (o Pacote é obrigatório):
+          ${copyList([['Ação', 'br.com.meubolso.app.REGISTRAR'], ['Pacote', 'br.com.meubolso.app'], ['Nome do extra', 'texto'], ['Valor do extra', '{not_app_name} {not_title} {notification}']])}
         </li>
-        <li>Salve a macro. Para testar, faça um Pix pequeno e abra o Meu Bolso.</li>
+        <li><b>Ação (opção 2, se a 1 não chegar):</b> <i>Abrir site</i> (em Aplicativos) com este endereço:
+          ${copyList([['Endereço', 'meubolso://registrar?texto={not_app_name} {not_title} {notification}']])}
+          <small class="muted">O Meu Bolso guarda e fecha na hora, mostrando "Meu Bolso: recebido".</small>
+        </li>
+        <li>Salve a macro. O texto mágico usa <b>chaves</b> { }, não colchetes. O botão de testar do MacroDroid envia o texto vazio: serve só para ver se chegou no diagnóstico abaixo.</li>
       </ol>
+      </details>
+      <h3 class="impact-title">Diagnóstico: o que o MacroDroid enviou</h3>
+      <div id="diag" class="diag"><p class="hint">Carregando…</p></div>
+      <button type="button" class="btn ghost sm" id="diag-refresh">Atualizar</button>
     </div>
     <p class="hint">Também dá para usar <b>Compartilhar → Meu Bolso</b> em prints, textos, PDF de fatura, CSV, OFX e planilhas.</p>
     <label class="check"><input type="checkbox" id="auto-reg" ${st.autoRegister !== false ? 'checked' : ''}> <span>Registrar sozinho (repetidos sempre pedem confirmação)</span></label>
@@ -96,7 +107,7 @@ export default {
         <ol class="bullets">
           <li><b>Print ou texto:</b> em Início → <b>Notificações</b>, envie um print da central de notificações ou da tela "Atividade" do app. Várias movimentações de uma vez.</li>
           <li><b>Compartilhar (Android):</b> com o app instalado na tela inicial, toque em Compartilhar num print ou texto e escolha <b>Meu Bolso</b>.</li>
-          <li><b>Automático (Android):</b> no app <b>MacroDroid</b> (gratuito), crie a macro: gatilho <i>Notificação recebida</i> dos apps Mercado Pago, 99, 99Pay e seu banco, com texto contendo "R$"; ação <i>Abrir site</i> com o endereço abaixo seguido do texto da notificação ([not_app_name] [not_title] [notification]).</li>
+          <li><b>Automático (Android):</b> no app <b>MacroDroid</b> (gratuito), crie a macro: gatilho <i>Notificação recebida</i> dos apps Mercado Pago, 99, 99Pay e seu banco, com texto contendo "R$"; ação <i>Abrir site</i> com o endereço abaixo seguido do texto da notificação ({not_app_name} {not_title} {notification}).</li>
           <li><b>iPhone:</b> o iOS não deixa outros apps lerem notificações. Use o print ou copie o texto.</li>
         </ol>
         ${window.claude
@@ -135,6 +146,22 @@ export default {
       nativeFeatures().then(({ listener }) => {
         root.querySelector(listener ? '#nat-listener' : '#nat-macro').hidden = false;
         if (!listener) {
+          const diag = async () => {
+            const items = (await automationLog()).reverse();
+            const el = root.querySelector('#diag');
+            if (!el) return;
+            el.innerHTML = String(
+              items.length
+                ? html`<ul class="diag-list">${items.map((it) => {
+                    const d = new Date(it.time);
+                    const when = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                    return html`<li><span class="pill ${it.queued ? 'ok' : 'warn'}">${it.queued ? 'recebido' : 'sem valor'}</span> <small class="muted">${when} · ${it.via}</small><br><code>${it.text || '(texto vazio: confira o valor do extra / texto mágico)'}</code></li>`;
+                  })}</ul>`
+                : html`<p class="status error">Nada chegou do MacroDroid ainda. Confira: Destino = Broadcast, Pacote = br.com.meubolso.app e a macro ativada. Ou use a opção 2 (Abrir site).</p>`,
+            );
+          };
+          diag();
+          root.querySelector('#diag-refresh').addEventListener('click', diag);
           status.className = 'status info';
           status.textContent = 'Registro automático pelo MacroDroid: configure uma vez seguindo os passos abaixo.';
           return;

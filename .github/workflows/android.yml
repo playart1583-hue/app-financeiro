@@ -73,10 +73,12 @@ jobs:
           target_commitish: ${{ github.sha }}
           # só a variante leve vai para Releases: a "completo" é bloqueada pelo Play Protect quando baixada no celular
           # e fica apenas nos Artifacts da execução, para instalar pelo computador
-          files: ${{ steps.apk.outputs.file }}
+          files: |
+            ${{ steps.apk.outputs.file }}
+            automacao/MeuBolso.macro
           make_latest: true
           body: |
             **Baixe o `${{ steps.apk.outputs.file }}`** no celular, abra e permita instalar apps desta fonte.
-            O registro automático das notificações é feito com o MacroDroid (passo a passo em Ajustes no app).
+            O registro automático das notificações é feito com o MacroDroid: baixe também o `MeuBolso.macro` e importe no MacroDroid (☰ → Exportar/Importar → Importar).
 
             Gerado a partir de ${{ github.ref_name }} (${{ github.sha }}).
