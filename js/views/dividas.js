@@ -1,9 +1,11 @@
-import { addMonths, averages, debtsForPlan, keyOf, loanBalance, loanDueDates, loanIsOpen, loanMonthly } from '../analytics.js';
+import { addMonths, averages, debtsForPlan, interestCommitments, keyOf, loanBalance, loanDueDates, loanIsOpen, loanMonthly } from '../analytics.js';
 import { monthlyToAnnual, pricePayment, rateFromInstallments, simulateExtraPayment, simulatePayoff } from '../finance.js';
 import { parseSerasaText, toISO } from '../parser.js';
-import { analyzeSerasa, currentEngine } from '../receipt.js';
-import { addLoan, amortizeLoan, deleteLoan, negotiateLoan, payLoan } from '../store.js';
-import { dateBR, emptyState, esc, html, icon, money, moneyInput, monthName, openSheet, pct, progress, readMoney, toast } from '../ui.js';
+import { analyzeSerasa } from '../receipt.js';
+import { openReader } from './reader.js';
+import { addLoan, amortizeLoan, deleteLoan, negotiateLoan, payLoan, payoffInstallments } from '../store.js';
+import { openLoanContract } from './emprestimo.js';
+import { dateBR, emptyState, html, icon, money, moneyInput, monthName, openSheet, pct, progress, readMoney, toast } from '../ui.js';
 
 const KINDS = { emprestimo: 'Empréstimo pessoal', consignado: 'Consignado', financiamento: 'Financiamento', pix_parcelado: 'Pix parcelado', cartao: 'Cartão de crédito', cheque: 'Cheque especial', acordo: 'Acordo', serasa: 'Negativada', outro: 'Outro' };
 const STRATEGIES = {
@@ -52,8 +54,30 @@ function loanCard(l) {
   </article>`;
 }
 
+const KIND_LABEL = { pix_parcelado: 'Pix parcelado', cartao_parcelado: 'Cartão parcelado', parcelamento: 'Parcelamento', ...KINDS };
+
+function earlyPayoff(state) {
+  const all = interestCommitments(state, new Date());
+  const paid = all.filter((c) => !c.interestFree && c.savings > 1);
+  const free = all.filter((c) => c.interestFree);
+  if (!paid.length && !free.length) return '';
+  return html`<section class="card">
+    <h2 class="card-title">${icon('bolt')} Encerre primeiro para pagar menos juros</h2>
+    <p class="hint">Do mais caro para o mais barato. Ao quitar antes, os juros das parcelas futuras são descontados (Código de Defesa do Consumidor, art. 52): peça ao credor o valor de quitação antecipada.</p>
+    <ol class="payoff-list">${paid.map(
+      (c, i) => html`<li class="payoff ${i === 0 ? 'first' : ''}">
+        <div class="row-between"><b>${i + 1}. ${c.name}</b><span class="pill ${c.rate >= 0.05 ? 'bad' : 'warn'}">${pct(c.rate, 1)} a.m.</span></div>
+        <small class="muted">${KIND_LABEL[c.kind] || 'Dívida'}${c.remaining ? ` · faltam ${c.remaining} de ${money(c.pmt)}` : c.neverEnds ? ' · pagando o mínimo, não acaba' : ` · mínimo ${money(c.pmt)}`}</small>
+        <dl class="mini-kv"><div><dt>Falta pagar</dt><dd>${c.neverEnds ? 'sem fim' : money(c.remainingTotal)}</dd></div><div><dt>Quitar hoje</dt><dd>~${money(c.payoffToday)}</dd></div><div><dt>Economia</dt><dd class="income">${money(c.savings)}</dd></div></dl>
+        <div class="goal-actions"><button type="button" class="btn sm ${i === 0 ? 'primary' : ''}" data-act="early" data-id="${c.id}">${icon('check')} Quitei antecipado</button></div>
+      </li>`,
+    )}</ol>
+    ${free.length ? html`<p class="hint">${icon('info')} Sem juros: ${free.map((c) => c.name).join(', ')}. Não vale antecipar: deixe o dinheiro rendendo no cofrinho e pague as parcelas no prazo.</p>` : ''}
+  </section>`;
+}
+
 function plan(state, ui) {
-  const debts = debtsForPlan(state);
+  const debts = debtsForPlan(state, new Date());
   if (!debts.length) return '';
   const avg = averages(state, keyOf(new Date()));
   const minimos = debts.reduce((s, d) => s + (d.minPayment || 0), 0);
@@ -121,7 +145,9 @@ export default {
       <div class="btn-row">
         <button type="button" class="btn primary" data-act="add">${icon('plus')} Adicionar dívida</button>
         <button type="button" class="btn" data-act="serasa">${icon('shield')} Importar do Serasa</button>
+        <button type="button" class="btn" data-act="contract">${icon('camera')} Analisar contrato de empréstimo</button>
       </div>
+      ${earlyPayoff(state)}
       ${plan(state, ui)}
       ${neg.length ? html`<h2 class="section-title">Negativadas · priorize para limpar o nome</h2>${neg.map(loanCard)}` : ''}
       ${juro.length ? html`<h2 class="section-title">Com juros · da mais cara para a mais barata</h2>${juro.map(loanCard)}` : ''}
@@ -138,6 +164,10 @@ export default {
           return openLoanForm();
         case 'serasa':
           return openSerasaImport();
+        case 'contract':
+          return openLoanContract();
+        case 'early':
+          return openEarlyPayoff(b.dataset.id, state);
         case 'pay':
           return openPay(l);
         case 'negotiate':
@@ -171,6 +201,32 @@ export default {
     });
   },
 };
+
+function openEarlyPayoff(id, state) {
+  const c = interestCommitments(state, new Date()).find((x) => x.id === id);
+  if (!c) return;
+  openSheet({
+    title: `Quitar ${c.name}`,
+    body: html`<form class="form" id="ef">
+      <p>Valor estimado para quitar hoje: <b>${money(c.payoffToday, { force: true })}</b>${c.savings > 0 ? html` · economia de <b class="income">${money(c.savings, { force: true })}</b> em juros` : ''}.</p>
+      <label class="amount-field"><span class="cur">R$</span><input name="amount" inputmode="decimal" value="${moneyInput(c.payoffToday)}"></label>
+      <p class="hint">Use o valor exato que o banco ou app informar para quitação. ${c.source === 'parcelamento' ? 'As parcelas futuras saem das projeções.' : 'A dívida fica marcada como quitada.'}</p>
+      <button class="btn primary" type="submit">Confirmar quitação</button>
+    </form>`,
+    onMount(sheet) {
+      sheet.body.querySelector('#ef').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const v = readMoney(e.target.amount.value);
+        if (!(v > 0)) return;
+        if (c.source === 'parcelamento') payoffInstallments(c.id, v);
+        else if (state.loans.find((l) => l.id === c.id)?.mode === 'parcelado') amortizeLoan(c.id, v);
+        else payLoan(c.id, v);
+        sheet.close();
+        toast(`${c.name} quitado. Menos ${money(c.pmt, { force: true })} comprometidos por mês.`);
+      });
+    },
+  });
+}
 
 function openPay(l) {
   const suggested = l.mode === 'parcelado' ? l.pmt : l.mode === 'acordo' ? l.offer || l.balance : l.minPayment;
@@ -341,66 +397,35 @@ function openLoanForm() {
 }
 
 function openSerasaImport() {
-  let ctl = null;
-  const body = html`<div class="print">
-    <div class="status info">${icon('info')}<span>O Serasa não libera conexão direta com apps pessoais. Abra o app ou site do Serasa, vá em <b>Limpa Nome</b> (ou "Minhas dívidas"), tire um print da lista e envie aqui. Também dá para copiar e colar o texto.</span></div>
-    <label class="drop" id="s-drop"><input type="file" id="s-file" accept="image/png,image/jpeg,image/webp" class="sr-only">${icon('upload', 'lg')}<b>Enviar print do Serasa</b><span>Pode enviar um print de cada vez.</span></label>
-    <p class="hint" id="s-engine"></p>
-    <div id="s-status" class="status" hidden></div>
-    <details class="more"><summary>Colar texto</summary>
-      <label class="field"><span>Texto copiado do Serasa</span><textarea id="s-text" rows="6" placeholder="Banco X&#10;Dívida de R$ 2.345,67&#10;Pague R$ 480,00 à vista"></textarea></label>
-      <button type="button" class="btn primary" id="s-read">Ler texto</button>
-    </details>
-    <div id="s-results"></div>
-  </div>`;
-  openSheet({
+  openReader({
     title: 'Importar dívidas do Serasa',
-    body,
-    onMount(sheet) {
-      const $ = (s) => sheet.body.querySelector(s);
-      currentEngine().then((e) => ($('#s-engine').textContent = `Leitura com: ${e.label}`));
-      const status = (t, k = '') => {
-        $('#s-status').hidden = !t;
-        $('#s-status').className = `status ${k}`;
-        $('#s-status').innerHTML = t;
-      };
-      const showResults = (debts) => {
-        if (!debts.length) return status('Não encontrei dívidas nesse conteúdo. Confira se o print mostra o nome do credor e o valor.', 'error');
-        status('');
-        $('#s-results').innerHTML = String(html`<h3 class="section-title">Encontrei ${debts.length} dívida${debts.length > 1 ? 's' : ''}</h3>
-          <form id="s-form" class="form">${debts.map(
-            (d, i) => html`<fieldset class="card import-row"><label class="check"><input type="checkbox" name="use" value="${i}" checked> <b>${d.creditor}</b></label>
-              <div class="row2"><label class="field"><span>Dívida</span><input name="bal-${i}" inputmode="decimal" value="${moneyInput(d.balance)}"></label><label class="field"><span>Oferta à vista</span><input name="off-${i}" inputmode="decimal" value="${moneyInput(d.offer)}"></label></div>
-              ${d.offerInstallments ? html`<p class="hint">Parcelado: ${d.offerInstallments.n || '?'}x de ${money(d.offerInstallments.pmt, { force: true })}</p>` : ''}</fieldset>`,
-          )}<button class="btn primary" type="submit">Adicionar ao plano</button></form>`);
-        $('#s-form').addEventListener('submit', (e) => {
-          e.preventDefault();
-          const f = e.target;
-          const picked = [...f.querySelectorAll('[name=use]:checked')].map((c) => +c.value);
-          for (const i of picked) {
-            const d = debts[i];
-            addLoan({ mode: 'acordo', name: d.creditor, creditor: d.creditor, kind: 'serasa', balance: readMoney(f[`bal-${i}`].value) || d.balance, offer: readMoney(f[`off-${i}`].value) || null, offerInstallments: d.offerInstallments?.n ? d.offerInstallments : null, since: d.since || '', source: 'serasa' });
-          }
-          sheet.close();
-          toast(`${picked.length} dívida${picked.length > 1 ? 's' : ''} importada${picked.length > 1 ? 's' : ''}. Elas entram primeiro no plano para limpar o nome.`);
-        });
-      };
-      $('#s-file').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        ctl?.abort();
-        ctl = new AbortController();
-        status(String(html`<span class="spinner" aria-hidden="true"></span><span id="s-msg">Lendo o print…</span>`), 'busy');
-        try {
-          const r = await analyzeSerasa(file, { signal: ctl.signal, onStatus: (m) => $('#s-msg') && ($('#s-msg').textContent = m) });
-          showResults(r.debts);
-        } catch (err) {
-          if (err?.code === 'cancelled') return;
-          status(esc(err?.message || 'Não consegui ler esse print.'), 'error');
-          sheet.body.querySelector('details').open = true;
+    intro: html`O Serasa não libera conexão direta com apps pessoais. Abra o app ou site do Serasa, vá em <b>Limpa Nome</b> (ou "Minhas dívidas"), tire um print da lista e envie aqui. Também dá para copiar e colar o texto.`,
+    dropTitle: 'Enviar print do Serasa',
+    dropText: 'Pode enviar um print de cada vez.',
+    textLabel: 'Texto copiado do Serasa',
+    textPlaceholder: 'Banco X\nDívida de R$ 2.345,67\nPague R$ 480,00 à vista',
+    analyze: (file, o) => analyzeSerasa(file, o).then((r) => r.debts),
+    parseText: (t) => parseSerasaText(t),
+    onResult(debts, sheet) {
+      const box = sheet.body.querySelector('#r-results');
+      if (!debts.length) return sheet.status('Não encontrei dívidas nesse conteúdo. Confira se o print mostra o nome do credor e o valor.', 'error');
+      box.innerHTML = String(html`<h3 class="section-title">Encontrei ${debts.length} dívida${debts.length > 1 ? 's' : ''}</h3>
+        <form id="s-form" class="form">${debts.map(
+          (d, i) => html`<fieldset class="card import-row"><label class="check"><input type="checkbox" name="use" value="${i}" checked> <b>${d.creditor}</b></label>
+            <div class="row2"><label class="field"><span>Dívida</span><input name="bal-${i}" inputmode="decimal" value="${moneyInput(d.balance)}"></label><label class="field"><span>Oferta à vista</span><input name="off-${i}" inputmode="decimal" value="${moneyInput(d.offer)}"></label></div>
+            ${d.offerInstallments ? html`<p class="hint">Parcelado: ${d.offerInstallments.n || '?'}x de ${money(d.offerInstallments.pmt, { force: true })}</p>` : ''}</fieldset>`,
+        )}<button class="btn primary" type="submit">Adicionar ao plano</button></form>`);
+      box.querySelector('#s-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const f = e.target;
+        const picked = [...f.querySelectorAll('[name=use]:checked')].map((c) => +c.value);
+        for (const i of picked) {
+          const d = debts[i];
+          addLoan({ mode: 'acordo', name: d.creditor, creditor: d.creditor, kind: 'serasa', balance: readMoney(f[`bal-${i}`].value) || d.balance, offer: readMoney(f[`off-${i}`].value) || null, offerInstallments: d.offerInstallments?.n ? d.offerInstallments : null, since: d.since || '', source: 'serasa' });
         }
+        sheet.close();
+        toast(`${picked.length} dívida${picked.length > 1 ? 's' : ''} importada${picked.length > 1 ? 's' : ''}. Elas entram primeiro no plano para limpar o nome.`);
       });
-      $('#s-read').addEventListener('click', () => showResults(parseSerasaText($('#s-text').value)));
     },
   });
 }

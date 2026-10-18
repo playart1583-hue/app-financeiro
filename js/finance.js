@@ -231,3 +231,57 @@ export function monthlyToReach(target, saved, i, months) {
   const f = Math.pow(1 + i, months);
   return (target - saved * f) * i / (f - 1);
 }
+
+/**
+ * Taxas de referência aproximadas (% ao mês) para comparar ofertas.
+ * São ordens de grandeza do mercado brasileiro, não dados ao vivo: confira as médias atuais no site do Banco Central.
+ */
+export const REFERENCE_RATES = {
+  consignado: 0.019,
+  financiamento: 0.02,
+  emprestimo: 0.06,
+  pix_parcelado: 0.06,
+  cartao: 0.14,
+  cheque: 0.08,
+};
+
+/**
+ * Custo real de uma oferta de empréstimo.
+ * released = quanto cai na conta; financed = valor total financiado (inclui IOF, tarifas, seguro).
+ * A taxa efetiva compara o que você recebe com o que vai pagar: é o custo de verdade (próximo do CET).
+ */
+export function analyzeLoanOffer({ released, financed, pmt, n, statedRate = null }) {
+  const base = released || financed;
+  if (!(base > 0) || !(pmt > 0) || !(n > 0)) return null;
+  const total = pmt * n;
+  const effRate = rateFromInstallments(base, pmt, n);
+  const nominal = statedRate ?? (financed ? rateFromInstallments(financed, pmt, n) : effRate);
+  const fees = financed && released && financed > released ? financed - released : 0;
+  const expectedPmt = statedRate != null && financed ? pricePayment(financed, statedRate, n) : null;
+  return {
+    base,
+    total: round2(total),
+    cost: round2(total - base),
+    costPct: (total - base) / base,
+    effRate,
+    effAnnual: monthlyToAnnual(effRate),
+    nominal,
+    nominalAnnual: monthlyToAnnual(nominal),
+    fees: round2(fees),
+    expectedPmt: expectedPmt ? round2(expectedPmt) : null,
+    // parcela bem acima da que a taxa informada daria: há custo embutido que não aparece na taxa
+    pmtMismatch: expectedPmt ? Math.abs(expectedPmt - pmt) / pmt > 0.03 : false,
+  };
+}
+
+/** Juros pagos ao longo de `months` meses pagando `pmt` por mês num saldo que cresce à taxa i. */
+export function interestOver(balance, i, pmt, months) {
+  let b = balance;
+  let interest = 0;
+  for (let m = 0; m < months && b > 0.005; m++) {
+    const j = b * i;
+    interest += j;
+    b = b + j - Math.min(pmt, b + j);
+  }
+  return { interest: round2(interest), left: round2(Math.max(0, b)) };
+}

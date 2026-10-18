@@ -123,7 +123,7 @@ export function parseQuickEntry(input, today = new Date()) {
   };
 }
 
-const BANKS = ['nubank', 'itau', 'bradesco', 'santander', 'banco do brasil', 'caixa', 'inter', 'c6', 'picpay', 'mercado pago', 'neon', 'next', 'original', 'btg', 'xp', 'sicoob', 'sicredi', 'pagbank', 'pagseguro', 'will bank', 'porto', 'ourocard'];
+const BANKS = ['99pay', '99 pay', 'nubank', 'itau', 'bradesco', 'santander', 'banco do brasil', 'caixa', 'inter', 'c6', 'picpay', 'mercado pago', 'neon', 'next', 'original', 'btg', 'xp', 'sicoob', 'sicredi', 'pagbank', 'pagseguro', 'will bank', 'porto', 'ourocard'];
 const BRANDS = ['visa', 'mastercard', 'master', 'elo', 'hipercard', 'amex', 'american express'];
 
 /** Encontra informações do cartão: "final 1234", "**** 1234", bandeira, banco. */
@@ -191,6 +191,15 @@ export function parseReceiptText(text, today = new Date()) {
       break;
     }
   }
+  let counterpartLabel = null;
+  if (!merchant) {
+    merchant = notificationCounterpart(original);
+    // "Pix para Maria" / "Pix de João" deixa o extrato mais claro do que só o nome
+    if (merchant && /\b(pix|transferencia|transferiu)\b/.test(t)) {
+      const what = /\bpix\b/.test(t) ? 'Pix' : 'Transferência';
+      counterpartLabel = /\b(recebeu|recebid[oa])\b/.test(t) ? `${what} de ${merchant}` : `${what} para ${merchant}`;
+    }
+  }
   if (!merchant) {
     // notificação: "Compra aprovada ... em PADARIA DOCE PAO" / "no(a) LOJA X"
     const m = original.match(/\b(?:em|no|na|no\(a\))\s+([A-Z0-9][A-Z0-9 &*.'\-]{2,40})(?=\s+(?:para|com|em|no|na|dia|às|as|valor|r\$)\b|[.,\n]|$)/);
@@ -199,11 +208,14 @@ export function parseReceiptText(text, today = new Date()) {
   if (merchant) merchant = merchant.replace(/\s{2,}/g, ' ').replace(/[*]+/g, ' ').trim();
 
   const cityMatch = original.match(/(?:cidade|local)\s*[:\-]\s*([^\n]+)/i);
-  const method = methodFrom(t) || (inst && inst.n > 1 ? 'credito' : null);
+  // carteiras digitais (Mercado Pago, 99Pay, PicPay) sem forma explícita: saiu do saldo, tratamos como Pix
+  const method = methodFrom(t) || (inst && inst.n > 1 ? 'credito' : null) || (/mercado pago|99pay|99 pay|picpay|\b99\b/.test(t) ? 'pix' : null);
   const card = findCard(original);
   const date = findDate(original, today);
   const time = findTime(original);
-  const income = /\b(recebid[oa]|voce recebeu|credito em conta|deposito recebido|pix recebido)\b/.test(t);
+  const income = /\b(recebid[oa]|voce recebeu|recebeu um pix|credito em conta|deposito recebido|pix recebido|transferencia recebida|caiu na sua conta|entrou na sua conta)\b/.test(t) && !/\b(voce enviou|pix enviado|voce pagou|pagamento enviado)\b/.test(t);
+  const app = findApp(t);
+  if (!merchant && app === '99' && /corrida|viagem/.test(t)) merchant = 'Corrida 99';
   const desc = merchant || lines[0] || '';
   const category = categorize(desc, income ? 'income' : 'expense') || categorize(original, income ? 'income' : 'expense');
 
@@ -218,7 +230,7 @@ export function parseReceiptText(text, today = new Date()) {
     type: income ? 'income' : 'expense',
     amount: amount > 0 ? amount : null,
     merchant,
-    description: merchant || null,
+    description: counterpartLabel || merchant || null,
     date,
     time,
     method,
@@ -228,6 +240,141 @@ export function parseReceiptText(text, today = new Date()) {
     cashPrice,
     location: cityMatch ? cityMatch[1].trim() : null,
     category: category || null,
+    app,
+  };
+}
+
+const APPS = [
+  ['mercado pago', 'Mercado Pago'],
+  ['mercadopago', 'Mercado Pago'],
+  ['99pay', '99Pay'],
+  ['99 pay', '99Pay'],
+  ['99food', '99Food'],
+  ['99 food', '99Food'],
+  ['nubank', 'Nubank'],
+  ['picpay', 'PicPay'],
+  ['inter', 'Inter'],
+  ['itau', 'Itaú'],
+  ['bradesco', 'Bradesco'],
+  ['santander', 'Santander'],
+  ['caixa', 'Caixa'],
+  ['banco do brasil', 'Banco do Brasil'],
+  ['c6', 'C6 Bank'],
+];
+/** App/banco de onde veio a notificação (para preencher "cartão / conta"). */
+export function findApp(normalizedText) {
+  const hit = APPS.find(([k]) => new RegExp(`(^|[^a-z0-9])${k}([^a-z0-9]|$)`).test(normalizedText));
+  if (hit) return hit[1];
+  if (/(^|\s)99(\s|$)|corrida|motorista parceiro/.test(normalizedText) && /corrida|viagem|99/.test(normalizedText)) return '99';
+  return null;
+}
+
+/** "Você enviou um Pix de R$ 50,00 para Maria Souza" -> "Maria Souza"; "Você recebeu R$ 20 de João" -> "João". */
+function notificationCounterpart(text) {
+  const m =
+    text.match(/(?:enviou|enviad[oa]|transferiu|pagou|pagamento(?: de [^\n]*?)?)\b[^\n]*?\b(?:para|a|em)\s+([A-ZÀ-Ú0-9][\wÀ-ú&*.' -]{1,40}?)(?=\s*(?:[.,!\n]|$| via | com | no valor| às | as | em \d| - ))/i) ||
+    text.match(/(?:recebeu|recebid[oa])\b[^\n]*?\bde\s+([A-ZÀ-Ú0-9][\wÀ-ú&*.' -]{1,40}?)(?=\s*(?:[.,!\n]|$| via | com | às | as | - ))/i);
+  if (!m) return null;
+  const v = m[1].trim();
+  return /^(r\$|\d)/i.test(v) ? null : v;
+}
+
+/**
+ * Separa um bloco com várias notificações (coladas ou lidas de um print da central de notificações)
+ * e interpreta cada uma. Blocos sem valor são descartados.
+ */
+export function parseNotifications(text, today = new Date()) {
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+  // separadores: linha em branco, ou início de nova notificação conhecida
+  const starts = /^(?:mercado pago|99pay|99|nubank|inter|picpay|itau|itaú|bradesco|santander|caixa|c6|pix (?:enviado|recebido)|compra (?:aprovada|realizada)|você (?:enviou|recebeu|pagou)|voce (?:enviou|recebeu|pagou)|transferência|transferencia|pagamento)/i;
+  const blocks = [];
+  let cur = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const l = line.trim();
+    if (!l) {
+      if (cur.length) blocks.push(cur), (cur = []);
+      continue;
+    }
+    if (cur.length && starts.test(l) && cur.some((x) => /\d+[.,]\d{2}/.test(x))) blocks.push(cur), (cur = []);
+    cur.push(l);
+  }
+  if (cur.length) blocks.push(cur);
+  return blocks
+    .map((b) => ({ ...parseReceiptText(b.join('\n'), today), raw: b.join(' · ') }))
+    .filter((r) => r.amount > 0);
+}
+
+/**
+ * Lê o texto de um contrato/proposta de empréstimo (CCB, simulação do banco, consignado, financiamento).
+ * Percentuais retornam como fração (4,5% -> 0.045).
+ */
+export function parseLoanText(text, today = new Date()) {
+  const original = String(text || '');
+  const lines = original.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const norm = lines.map(normalize);
+  const MONEY = /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/i;
+  const money = (re) => {
+    for (let k = 0; k < norm.length; k++) {
+      if (!re.test(norm[k])) continue;
+      const after = lines[k].slice(norm[k].search(re));
+      const m = after.match(MONEY) || (lines[k + 1] || '').match(MONEY);
+      if (m) return parseAmount(m[1]);
+    }
+    return null;
+  };
+  const pcts = (re) => {
+    const out = { m: null, a: null };
+    for (let k = 0; k < norm.length; k++) {
+      if (!re.test(norm[k])) continue;
+      const seg = `${norm[k]} ${/%/.test(norm[k]) ? '' : norm[k + 1] || ''}`;
+      for (const p of seg.matchAll(/(\d{1,3}(?:[.,]\d{1,4})?)\s*%\s*(a\.?\s*m\.?|a\.?\s*a\.?|ao mes|ao ano|mensal|anual)?/g)) {
+        const v = parseFloat(p[1].replace(',', '.')) / 100;
+        const unit = p[2] || (/anual|ao ano|a\.a/.test(seg.slice(0, p.index)) && !/mensal|ao mes|a\.m/.test(seg.slice(0, p.index)) ? 'a.a' : 'a.m');
+        if (/a\.?\s*a|ano|anual/.test(unit)) out.a = out.a ?? v;
+        else out.m = out.m ?? v;
+      }
+      if (out.m != null && out.a != null) break;
+    }
+    return out;
+  };
+  const nMatch = original.match(/(\d{1,3})\s*(?:parcelas|prestacoes|prestações|meses|x\b)/i) || normalize(original).match(/(?:quantidade de parcelas|prazo|numero de parcelas|n[ºo°] de parcelas)\D{0,12}(\d{1,3})/);
+  const n = nMatch ? +nMatch[1] : null;
+  const released = money(/valor (?:liquido|liberado|creditado|a ser creditado|disponibilizado|que voce recebe)|liquido liberado|credito liberado|valor recebido|voce recebe|voce vai receber/);
+  const financed = money(/valor (?:total )?(?:financiado|do emprestimo|do credito|solicitado|contratado|principal|bruto)|total financiado|montante financiado/);
+  const pmt = money(/valor da (?:parcela|prestacao)|parcela(?:s)? (?:mensal|mensais|de)|prestacao mensal|valor mensal/);
+  const total = money(/valor total (?:a pagar|das parcelas|devido)|total a pagar|montante total/);
+  const iof = money(/\biof\b/);
+  const insurance = money(/seguro/);
+  const tariff = money(/tarifa|tac\b|taxa de cadastro|taxa de abertura/);
+  const juros = pcts(/taxa (?:de )?juros|juros (?:remuneratorios|mensal|ao mes|a\.m)|taxa nominal|taxa efetiva|^taxa\b(?!.*\bcet\b)/);
+  const cet = pcts(/\bcet\b|custo efetivo/);
+  let firstDue = null;
+  for (let k = 0; k < norm.length; k++) {
+    if (/(1[ªao°]|primeir[oa]) (?:parcela|vencimento|prestacao)|vencimento da 1|data do primeiro vencimento|primeiro vencimento/.test(norm[k])) {
+      firstDue = findDate(lines[k], today) || findDate(lines[k + 1] || '', today);
+      if (firstDue) break;
+    }
+  }
+  const t = normalize(original);
+  const kind = /consignado|inss|margem consignavel/.test(t) ? 'consignado' : /financiamento|veiculo|imovel|alienacao/.test(t) ? 'financiamento' : /pix parcelado/.test(t) ? 'pix_parcelado' : 'emprestimo';
+  const creditor = findApp(t) || findCard(original)?.bank || null;
+  const pmtFinal = pmt || (total && n ? total / n : null);
+  return {
+    creditor,
+    kind,
+    released: released || null,
+    financed: financed || null,
+    n,
+    pmt: pmtFinal,
+    statedRate: juros.m ?? (juros.a != null ? Math.pow(1 + juros.a, 1 / 12) - 1 : null),
+    statedAnnual: juros.a,
+    cetMonthly: cet.m ?? (cet.a != null ? Math.pow(1 + cet.a, 1 / 12) - 1 : null),
+    cetAnnual: cet.a,
+    iof,
+    insurance,
+    tariff,
+    firstDue,
   };
 }
 

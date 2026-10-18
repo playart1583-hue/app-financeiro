@@ -64,3 +64,30 @@ test('categorização automática', () => {
   assert.equal(categorize('Drogasil'), 'saude');
   assert.equal(categorize('rendimento CDB', 'income'), 'investimentos');
 });
+
+import { parseLoanText, parseNotifications } from '../js/parser.js';
+
+test('notificações do Mercado Pago, 99 e bancos', () => {
+  const list = parseNotifications('Mercado Pago\nVocê enviou um Pix de R$ 50,00 para Maria Souza.\n\n99\nSua corrida foi paga. Total R$ 18,90 às 08:15\n\n99Pay\nPix recebido: você recebeu R$ 120,00 de João Lima', today);
+  assert.equal(list.length, 3);
+  assert.deepEqual([list[0].type, list[0].amount, list[0].description, list[0].method, list[0].app], ['expense', 50, 'Pix para Maria Souza', 'pix', 'Mercado Pago']);
+  assert.deepEqual([list[1].amount, list[1].category, list[1].time], [18.9, 'transporte', '08:15']);
+  assert.deepEqual([list[2].type, list[2].amount, list[2].description], ['income', 120, 'Pix de João Lima']);
+});
+
+test('"mercado pago" não vira categoria Mercado', () => {
+  assert.equal(categorize('Mercado Pago'), 'outros');
+});
+
+test('contrato de empréstimo (CCB)', () => {
+  const c = parseLoanText('CÉDULA DE CRÉDITO BANCÁRIO - Banco Inter\nValor Total Financiado: R$ 5.420,50\nValor Líquido Liberado: R$ 5.000,00\nIOF: R$ 120,50\nTarifa de Cadastro: R$ 300,00\nQuantidade de Parcelas: 24\nValor da Parcela: R$ 372,15\nTaxa de Juros: 4,50% a.m. / 69,59% a.a.\nCET: 5,32% a.m. 86,24% a.a.\nVencimento da 1ª parcela: 20/11/2026', today);
+  assert.deepEqual([c.creditor, c.released, c.financed, c.n, c.pmt, c.iof, c.tariff, c.firstDue], ['Inter', 5000, 5420.5, 24, 372.15, 120.5, 300, '2026-11-20']);
+  assert.ok(Math.abs(c.statedRate - 0.045) < 1e-9);
+  assert.ok(Math.abs(c.cetMonthly - 0.0532) < 1e-9);
+});
+
+test('simulação de consignado', () => {
+  const c = parseLoanText('Simulação consignado INSS\nVocê recebe R$ 3.000,00\n84 parcelas de R$ 64,90\nTaxa 1,80% ao mês\nCET 1,95% ao mês', today);
+  assert.deepEqual([c.kind, c.released, c.n, c.pmt], ['consignado', 3000, 84, 64.9]);
+  assert.ok(Math.abs(c.statedRate - 0.018) < 1e-9);
+});

@@ -2,7 +2,8 @@
 import { keyOf, addMonths } from './analytics.js';
 import { cloud, getState, init, subscribe } from './store.js';
 import { closeAllSheets, html, icon } from './ui.js';
-import { openTxForm } from './views/form.js';
+import { openPrintSheet, openTxForm } from './views/form.js';
+import { ingestExternalText, openNotificationsImport } from './views/importar.js';
 import inicio from './views/home.js';
 import extrato from './views/extrato.js';
 import relatorios from './views/relatorios.js';
@@ -106,6 +107,42 @@ ui.route = routeFromHash();
 subscribe(() => render());
 cloud.onStatus = () => ui.route === 'ajustes' && render();
 render();
+
+// Entradas vindas de fora do app:
+// - automação do Android (MacroDroid/Tasker) abre  .../?registrar=<texto da notificação>
+// - menu "Compartilhar" do celular envia texto (GET ?text=) ou imagem (POST tratado pelo sw.js -> ?compartilhado=1)
+async function handleIncoming() {
+  let params;
+  try {
+    params = new URLSearchParams(location.search);
+  } catch {
+    return;
+  }
+  const text = [params.get('registrar'), params.get('title'), params.get('text')].filter(Boolean).join('\n').trim();
+  const shared = params.has('compartilhado');
+  if (!text && !shared) return;
+  try {
+    history.replaceState(null, '', location.pathname + location.hash);
+  } catch {
+    /* ignore */
+  }
+  if (text) return ingestExternalText(text);
+  try {
+    const cache = await caches.open('meubolso-share');
+    const fileRes = await cache.match('share/file');
+    const textRes = await cache.match('share/text');
+    const sharedText = textRes ? await textRes.text() : '';
+    const file = fileRes ? new File([await fileRes.blob()], fileRes.headers.get('x-name') || 'print.jpg', { type: fileRes.headers.get('content-type') || 'image/jpeg' }) : null;
+    await cache.delete('share/file');
+    await cache.delete('share/text');
+    if (file) openNotificationsImport({ file });
+    else if (sharedText) ingestExternalText(sharedText);
+    else openPrintSheet();
+  } catch {
+    openPrintSheet();
+  }
+}
+handleIncoming();
 
 // Instalação no celular (fora do Artifact). Service worker só funciona em http(s) próprio.
 if ('serviceWorker' in navigator && !window.claude && location.protocol.startsWith('http')) {

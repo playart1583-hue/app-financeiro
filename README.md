@@ -20,6 +20,10 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 | **Empréstimos e dívidas**: parcelados (calcula a taxa a partir da parcela), cartão rotativo/cheque especial, negativadas; pagar parcela, simular amortização | Planejar → Dívidas |
 | **Dívidas do Serasa**: importar por print ou texto do Serasa Limpa Nome, com oferta de desconto | Dívidas → *Importar do Serasa* |
 | **Plano para zerar dívidas**: compara *Nome limpo primeiro*, *Avalanche* (menos juros) e *Bola de neve*; mostra o mês em que cada dívida acaba | Dívidas |
+| **Contrato de empréstimo por print**: lê valor liberado, valor financiado, parcelas, taxa, CET, IOF, tarifas e seguro; mostra o custo real, **o que melhora, o que piora e o impacto no dia a dia** (sobra mensal antes × depois, % da renda comprometida, metas que atrasam) antes de você contratar; pode quitar dívidas caras com o dinheiro | Início → *Empréstimo* · Planejar · Dívidas |
+| **Encerre primeiro**: ranking de Pix parcelados, parcelamentos com juros e empréstimos do mais caro para o mais barato, com valor para quitar hoje e juros economizados (desconto obrigatório na quitação antecipada, CDC art. 52) | Dívidas e Dicas |
+| **Notificações do Mercado Pago, 99, 99Pay e bancos**: várias de uma vez por print ou texto, com aviso de lançamento repetido | Início → *Notificações* |
+| **Registro automático** (Android): compartilhe um print/texto para o app instalado, ou use uma automação (MacroDroid) que abre `…/?registrar=<texto da notificação>` | Ajustes → Mercado Pago, 99 e notificações |
 | Cofrinhos (metas) com quanto guardar por mês até o prazo e rendimento estimado | Planejar → Cofrinhos |
 | Orçamento por categoria com alertas em 80% e 100% | Planejar → Orçamentos |
 | Sugestões automáticas: onde cortar, gastos pequenos, arredondamento para o cofrinho, reserva de emergência, dívida mais cara, plano de quitação | Início e Planejar → Dicas |
@@ -51,6 +55,16 @@ A leitura tenta, nesta ordem:
 3. **OCR no aparelho** (Tesseract.js) + interpretação por regras em `js/parser.js`: funciona sem conta, com menos precisão.
 
 Também é possível colar o texto de uma notificação ou comprovante.
+
+## Mercado Pago e 99
+
+Nenhum dos dois oferece uma API para apps pessoais lerem o extrato: a API do Mercado Pago é voltada a vendedores (pagamentos recebidos) e exige servidor próprio, e a 99 não tem API pública. Um app de navegador também não consegue ler as notificações do celular. Por isso o app oferece três caminhos:
+
+1. **Print ou texto** (Android e iPhone): Início → *Notificações*.
+2. **Compartilhar** (Android, app instalado na tela inicial): o app aparece no menu Compartilhar e recebe prints e textos.
+3. **Automação** (Android): no MacroDroid, gatilho *Notificação recebida* (Mercado Pago, 99, 99Pay, banco) e ação *Abrir site* com `https://SEU-ENDERECO/?registrar={not_title} {notification}`. O app registra sozinho e mostra "Desfazer"; repetidos pedem confirmação.
+
+A conexão direta com bancos e carteiras exige Open Finance via um agregador autorizado (Pluggy, Belvo), com servidor e contrato: é o próximo passo natural se o protótipo virar produto.
 
 ## Sobre o Serasa
 

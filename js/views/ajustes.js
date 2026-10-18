@@ -49,6 +49,20 @@ export default {
         </form>
       </section>
 
+      <section class="card" id="auto"><h2 class="card-title">${icon('bell')} Mercado Pago, 99 e notificações</h2>
+        <p class="hint">Mercado Pago e 99 não oferecem uma API para apps pessoais lerem seu extrato (a API do Mercado Pago é para quem vende e exige servidor próprio), e nenhum app de navegador consegue ler as notificações do celular sozinho. Estes são os caminhos que funcionam:</p>
+        <ol class="bullets">
+          <li><b>Print ou texto:</b> em Início → <b>Notificações</b>, envie um print da central de notificações ou da tela "Atividade" do app. Várias movimentações de uma vez.</li>
+          <li><b>Compartilhar (Android):</b> com o app instalado na tela inicial, toque em Compartilhar num print ou texto e escolha <b>Meu Bolso</b>.</li>
+          <li><b>Automático (Android):</b> no app <b>MacroDroid</b> (gratuito), crie a macro: gatilho <i>Notificação recebida</i> dos apps Mercado Pago, 99, 99Pay e seu banco, com texto contendo "R$"; ação <i>Abrir site</i> com o endereço abaixo seguido do texto da notificação ({not_title} {notification}).</li>
+          <li><b>iPhone:</b> o iOS não deixa outros apps lerem notificações. Use o print ou copie o texto.</li>
+        </ol>
+        ${window.claude
+          ? html`<p class="status info">${icon('info')}<span>O registro automático precisa do app publicado num endereço próprio (por exemplo, GitHub Pages, veja o README). Dentro do app da Claude use print ou texto.</span></p>`
+          : html`<label class="field"><span>Endereço para a automação</span><div class="qe-row"><input id="auto-url" readonly value="${location.origin + location.pathname}?registrar="><button type="button" class="btn sm" id="copy-url">${icon('copy')} Copiar</button></div></label>`}
+        <label class="check"><input type="checkbox" id="auto-reg" ${st.autoRegister !== false ? 'checked' : ''}> <span>Registrar sozinho o que chegar por automação ou compartilhamento (repetidos sempre pedem confirmação)</span></label>
+      </section>
+
       <section class="card"><h2 class="card-title">${icon('shield')} Seus dados</h2>
         <p class="hint" id="sync">${SYNC[cloud.status]}</p>
         <div class="btn-row">
@@ -73,6 +87,16 @@ export default {
       const rate = parseFloat(String(f.savingsRate.value).replace(',', '.')) / 100;
       updateSettings({ name: f.elements.name.value.trim(), theme: f.querySelector('[name=theme]:checked').value, hideValues: f.hideValues.checked, savingsRate: rate >= 0 && rate < 0.2 ? rate : state.settings.savingsRate });
       toast('Ajustes salvos');
+    });
+    root.querySelector('#auto-reg').addEventListener('change', (e) => {
+      updateSettings({ autoRegister: e.target.checked });
+      toast(e.target.checked ? 'Registro automático ligado' : 'Vou pedir confirmação antes de registrar');
+    });
+    root.querySelector('#copy-url')?.addEventListener('click', () => {
+      const input = root.querySelector('#auto-url');
+      const fallback = () => (input.select(), toast('Selecione e copie o endereço'));
+      if (!navigator.clipboard) return fallback();
+      navigator.clipboard.writeText(input.value).then(() => toast('Endereço copiado'), fallback);
     });
     root.querySelector('#keyf').addEventListener('submit', (e) => {
       e.preventDefault();

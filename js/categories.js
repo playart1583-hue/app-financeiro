@@ -9,8 +9,8 @@ export const CLASSIFICATIONS = {
 export const EXPENSE_CATEGORIES = [
   { id: 'moradia', name: 'Moradia', icon: '🏠', cls: 'essencial', kw: ['aluguel', 'condominio', 'iptu', 'imobiliaria', 'reforma', 'material de construcao', 'leroy'] },
   { id: 'mercado', name: 'Mercado', icon: '🛒', cls: 'essencial', kw: ['mercado', 'supermercado', 'atacad', 'assai', 'carrefour', 'pao de acucar', 'hortifruti', 'sacolao', 'feira', 'acougue', 'dia %', 'mercadinho', 'atacadao', 'big bompreco', 'guanabara', 'zaffari', 'savegnago'] },
-  { id: 'restaurantes', name: 'Restaurantes e delivery', icon: '🍔', cls: 'superfluo', kw: ['ifood', 'rappi', 'restaurante', 'lanchonete', 'pizza', 'burger', 'mcdonald', 'mc donald', 'bk ', 'burguer king', 'padaria', 'cafe', 'cafeteria', 'starbucks', 'almoco', 'jantar', 'lanche', 'bar ', 'boteco', 'sushi', 'acai', 'sorvete', 'subway', 'outback', 'habibs', 'giraffas', 'ze delivery'] },
-  { id: 'transporte', name: 'Transporte', icon: '🚗', cls: 'essencial', kw: ['uber', '99 ', '99app', '99pop', 'taxi', 'onibus', 'metro', 'gasolina', 'combustivel', 'etanol', 'posto', 'shell', 'ipiranga', 'petrobras', 'br mania', 'estacionamento', 'pedagio', 'sem parar', 'conectcar', 'bilhete unico', 'oficina', 'mecanico', 'seguro auto', 'ipva', 'licenciamento'] },
+  { id: 'restaurantes', name: 'Restaurantes e delivery', icon: '🍔', cls: 'superfluo', kw: ['ifood', 'rappi', 'restaurante', 'lanchonete', 'pizza', 'burger', 'mcdonald', 'mc donald', 'bk ', 'burguer king', 'padaria', 'cafe', 'cafeteria', 'starbucks', 'almoco', 'jantar', 'lanche', 'bar ', 'boteco', 'sushi', 'acai', 'sorvete', 'subway', 'outback', 'habibs', 'giraffas', 'ze delivery', '99food', '99 food'] },
+  { id: 'transporte', name: 'Transporte', icon: '🚗', cls: 'essencial', kw: ['uber', '99 ', '99app', '99pop', '99 corrida', 'corrida com a 99', 'sua corrida', 'viagem com a 99', 'taxi', 'onibus', 'metro', 'gasolina', 'combustivel', 'etanol', 'posto', 'shell', 'ipiranga', 'petrobras', 'br mania', 'estacionamento', 'pedagio', 'sem parar', 'conectcar', 'bilhete unico', 'oficina', 'mecanico', 'seguro auto', 'ipva', 'licenciamento'] },
   { id: 'contas', name: 'Contas da casa', icon: '💡', cls: 'essencial', kw: ['luz', 'energia', 'enel', 'cemig', 'copel', 'light', 'celpe', 'coelba', 'agua', 'sabesp', 'cedae', 'copasa', 'saneamento', 'internet', 'vivo', 'claro', 'tim ', 'oi fibra', 'celular', 'gas ', 'ultragaz', 'liquigas', 'telefone'] },
   { id: 'saude', name: 'Saúde', icon: '💊', cls: 'essencial', kw: ['farmacia', 'drogaria', 'droga raia', 'drogasil', 'pague menos', 'panvel', 'medico', 'consulta', 'exame', 'laboratorio', 'dentista', 'plano de saude', 'unimed', 'amil', 'hapvida', 'hospital', 'clinica', 'psicologo', 'remedio'] },
   { id: 'educacao', name: 'Educação', icon: '📚', cls: 'importante', kw: ['curso', 'escola', 'faculdade', 'mensalidade escolar', 'livro', 'livraria', 'udemy', 'alura', 'material escolar', 'idiomas', 'ingles'] },
@@ -24,7 +24,8 @@ export const EXPENSE_CATEGORIES = [
   { id: 'dividas', name: 'Dívidas e empréstimos', icon: '💳', cls: 'essencial', kw: ['emprestimo', 'parcela do emprestimo', 'fatura', 'juros', 'financiamento', 'consignado', 'acordo', 'renegociacao', 'serasa'] },
   { id: 'presentes', name: 'Presentes e doações', icon: '🎁', cls: 'importante', kw: ['presente', 'doacao', 'vaquinha', 'dizimo', 'oferta'] },
   { id: 'impostos', name: 'Impostos e taxas', icon: '🧾', cls: 'essencial', kw: ['imposto', 'taxa', 'multa', 'darf', 'tarifa', 'anuidade', 'iof', 'das mei'] },
-  { id: 'outros', name: 'Outros', icon: '📦', cls: 'importante', kw: [] },
+  // "mercado pago" é carteira, não supermercado: a palavra-chave mais longa evita cair em "Mercado"
+  { id: 'outros', name: 'Outros', icon: '📦', cls: 'importante', kw: ['mercado pago', 'mercadopago', '99pay'] },
 ];
 
 export const INCOME_CATEGORIES = [
@@ -32,6 +33,7 @@ export const INCOME_CATEGORIES = [
   { id: 'extra', name: 'Renda extra', icon: '💻', kw: ['freela', 'freelance', 'job', 'extra', 'bico', 'comissao', 'uber ganhos', 'corrida'] },
   { id: 'investimentos', name: 'Investimentos', icon: '📈', kw: ['rendimento', 'dividendo', 'juros recebidos', 'cdb', 'tesouro', 'resgate', 'jcp'] },
   { id: 'vendas', name: 'Vendas', icon: '🏷️', kw: ['venda', 'vendi', 'olx', 'enjoei'] },
+  { id: 'emprestimo-recebido', name: 'Empréstimo recebido', icon: '🏦', kw: ['emprestimo recebido', 'credito liberado', 'valor liberado'] },
   { id: 'reembolso', name: 'Reembolso', icon: '↩️', kw: ['reembolso', 'estorno', 'devolucao', 'cashback'] },
   { id: 'outros-ganhos', name: 'Outros ganhos', icon: '🎁', kw: ['pix recebido', 'presente', 'transferencia recebida'] },
 ];

@@ -7,6 +7,8 @@ import { emptyState, hbars, html, icon, money, monthName, progress } from '../ui
 import { txRow } from './extrato.js';
 import { insightCard } from './dicas.js';
 import { openPrintSheet, openTxForm, quickPreview, quickSave } from './form.js';
+import { openLoanContract } from './emprestimo.js';
+import { openNotificationsImport } from './importar.js';
 
 export default {
   id: 'inicio',
@@ -48,7 +50,9 @@ export default {
       <button type="button" data-act="new-expense"><span class="q-ic">${icon('minus')}</span>Gasto</button>
       <button type="button" data-act="new-income"><span class="q-ic">${icon('plus')}</span>Ganho</button>
       <button type="button" data-act="print"><span class="q-ic">${icon('camera')}</span>Ler print</button>
+      <button type="button" data-act="notifications"><span class="q-ic">${icon('bell')}</span>Notificações</button>
       <button type="button" data-go="pix"><span class="q-ic">${icon('pix')}</span>Pix parcelado</button>
+      <button type="button" data-act="contract"><span class="q-ic">${icon('calc')}</span>Empréstimo</button>
       <button type="button" data-go="cofrinhos"><span class="q-ic">${icon('piggy')}</span>Cofrinho</button>
       <button type="button" data-go="dividas"><span class="q-ic">${icon('bank')}</span>Dívidas</button>
     </nav>
@@ -56,7 +60,7 @@ export default {
     <section class="card">
       <form class="quick-entry" id="quick-form" autocomplete="off">
         <label for="quick-input" class="card-title">${icon('bolt')} Registro rápido</label>
-        <div class="qe-row"><input id="quick-input" placeholder='Ex.: "almoço 32,90 débito" ou "+ freela 300"' enterkeyhint="done"><button class="btn primary" type="submit">Salvar</button></div>
+        <div class="qe-row"><input id="quick-input" placeholder="Ex.: almoço 32,90 débito" enterkeyhint="done"><button class="btn primary" type="submit">Salvar</button></div>
         <div class="qe-preview" id="quick-preview" aria-live="polite"></div>
       </form>
     </section>
@@ -118,6 +122,8 @@ export default {
       if (act === 'new-expense') openTxForm({ prefill: { type: 'expense' } });
       if (act === 'new-income') openTxForm({ prefill: { type: 'income', category: 'salario', method: 'transferencia' } });
       if (act === 'print') openPrintSheet();
+      if (act === 'notifications') openNotificationsImport();
+      if (act === 'contract') openLoanContract();
     });
   },
 };

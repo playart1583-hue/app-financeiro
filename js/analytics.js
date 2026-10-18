@@ -1,5 +1,5 @@
 // Agregações e projeções sobre o estado do app (puro, sem DOM).
-import { outstandingBalance, round2 } from './finance.js';
+import { interestOver, outstandingBalance, presentValue, rateFromInstallments, round2 } from './finance.js';
 import { getCategory } from './categories.js';
 import { pad, toISO } from './parser.js';
 
@@ -100,7 +100,8 @@ const sum = (txs, f) => txs.filter(f).reduce((s, t) => s + t.amount, 0);
 
 export function averages(state, key, n = 3) {
   return {
-    income: averageOf(state, key, n, (txs) => sum(txs, (t) => t.type === 'income')),
+    // dinheiro de empréstimo não é renda: fica fora das médias e projeções
+    income: averageOf(state, key, n, (txs) => sum(txs, (t) => t.type === 'income' && !t.loanId)),
     expense: averageOf(state, key, n, (txs) => sum(txs, (t) => t.type === 'expense')),
     variable: averageOf(state, key, n, (txs) => sum(txs, isVariable)),
     essencial: averageOf(state, key, n, (txs) => sum(txs, (t) => t.type === 'expense' && t.classification === 'essencial')),
@@ -144,12 +145,70 @@ export function loanDueDates(loan) {
   return out;
 }
 
-/** Converte dívidas abertas para o simulador de quitação. */
-export function debtsForPlan(state) {
-  return state.loans.filter(loanIsOpen).map((l) => {
+/**
+ * Tudo que cobra juros e pode ser encerrado antes: Pix parcelado e cartão parcelado com juros,
+ * empréstimos parcelados e rotativo. Quitar antes dá direito a desconto proporcional dos juros (CDC, art. 52).
+ * Ordenado do mais caro para o mais barato; parcelamentos sem juros vão para o fim (não vale antecipar).
+ */
+export function interestCommitments(state, today = new Date()) {
+  const iso = toISO(today);
+  const out = [];
+  const groups = new Map();
+  for (const t of state.transactions) {
+    if (t.type !== 'expense' || !t.installment?.groupId) continue;
+    if (!groups.has(t.installment.groupId)) groups.set(t.installment.groupId, []);
+    groups.get(t.installment.groupId).push(t);
+  }
+  for (const [id, list] of groups) {
+    list.sort((a, b) => (a.date < b.date ? -1 : 1));
+    const first = list[0];
+    const future = list.filter((t) => t.date > iso);
+    if (!future.length || !first.installment.cash) continue;
+    const { n, cash } = first.installment;
+    const pmt = first.amount;
+    const rate = rateFromInstallments(cash, pmt, n);
+    const remainingTotal = future.reduce((s, t) => s + t.amount, 0);
+    const payoffToday = rate > 0 ? presentValue(pmt, rate, future.length) : remainingTotal;
+    out.push({
+      id,
+      source: 'parcelamento',
+      kind: first.method === 'pix_parcelado' ? 'pix_parcelado' : first.method === 'credito' ? 'cartao_parcelado' : 'parcelamento',
+      name: first.description,
+      rate,
+      pmt,
+      remaining: future.length,
+      n,
+      remainingTotal: round2(remainingTotal),
+      payoffToday: round2(payoffToday),
+      savings: round2(remainingTotal - payoffToday),
+      interestFree: rate < 0.0005,
+      endDate: future[future.length - 1].date,
+    });
+  }
+  for (const l of state.loans.filter(loanIsOpen)) {
+    if (l.mode === 'parcelado') {
+      const remaining = l.n - l.paid;
+      const payoffToday = loanBalance(l);
+      const due = loanDueDates(l);
+      out.push({ id: l.id, source: 'loan', kind: l.kind, name: l.name, rate: l.rate, pmt: l.pmt, remaining, n: l.n, remainingTotal: round2(l.pmt * remaining), payoffToday, savings: round2(l.pmt * remaining - payoffToday), interestFree: l.rate < 0.0005, endDate: due[due.length - 1]?.date || '' });
+    } else if (l.mode === 'rotativo') {
+      const sim = interestOver(l.balance, l.rate, l.minPayment, 120);
+      out.push({ id: l.id, source: 'loan', kind: l.kind, name: l.name, rate: l.rate, pmt: l.minPayment, remaining: null, n: null, remainingTotal: round2(l.balance + sim.interest), payoffToday: l.balance, savings: sim.interest, interestFree: false, endDate: '', neverEnds: sim.left > 0 });
+    }
+  }
+  return out.sort((a, b) => a.interestFree - b.interestFree || b.rate - a.rate);
+}
+
+/** Converte dívidas abertas (inclusive parcelamentos com juros) para o simulador de quitação. */
+export function debtsForPlan(state, today = new Date()) {
+  const loans = state.loans.filter(loanIsOpen).map((l) => {
     if (l.mode === 'acordo') return { id: l.id, name: l.name, kind: 'acordo', balance: l.offer || l.balance, original: l.balance };
     return { id: l.id, name: l.name, kind: 'juros', balance: loanBalance(l), rate: l.rate || 0, minPayment: loanMonthly(l) };
   });
+  const parcelamentos = interestCommitments(state, today)
+    .filter((c) => c.source === 'parcelamento' && !c.interestFree)
+    .map((c) => ({ id: c.id, name: c.name, kind: 'juros', balance: c.payoffToday, rate: c.rate, minPayment: c.pmt }));
+  return [...loans, ...parcelamentos];
 }
 
 // ---------- Projeções ----------
@@ -176,8 +235,8 @@ export function projectMonth(state, today = new Date()) {
   }, 0);
   const bills = pendingBills(state, key);
   const projected = spent + scheduled + loanDue + bills + daily * (dim - day);
-  const incomeIn = sum(txs, (t) => t.type === 'income');
-  const income = Math.max(incomeIn, txs.some((t) => t.type === 'income') ? incomeIn : avg.income);
+  const incomeIn = sum(txs, (t) => t.type === 'income' && !t.loanId);
+  const income = Math.max(incomeIn, txs.some((t) => t.type === 'income' && !t.loanId) ? incomeIn : avg.income);
   return {
     key,
     spent: round2(spent),
@@ -206,8 +265,9 @@ export function projectNextMonths(state, today = new Date(), n = 6) {
       if (l.mode === 'rotativo' && loanIsOpen(l)) return s + (l.minPayment || 0);
       return s;
     }, 0);
-    const incomeTx = sum(txs, (t) => t.type === 'income');
-    const income = incomeTx || avg.income;
+    const incomeTx = sum(txs, (t) => t.type === 'income' && !t.loanId);
+    // renda fixa lançada (salário recorrente) ou a média, o que for maior: a média inclui rendas extras
+    const income = Math.max(incomeTx, avg.income);
     const committed = committedTx + loans;
     const variable = avg.variable + pendingBills(state, key, base);
     out.push({

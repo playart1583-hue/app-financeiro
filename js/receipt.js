@@ -1,6 +1,6 @@
 // Leitura de prints: compra/pagamento (onde, quando, horário, cartão, parcelas, valor) e lista de dívidas do Serasa.
 // Motores, na ordem: Claude dentro do app da Claude (Artifact) → Claude API com chave própria → OCR no aparelho.
-import { parseReceiptText, parseSerasaText, toISO } from './parser.js';
+import { parseLoanText, parseNotifications, parseReceiptText, parseSerasaText, toISO } from './parser.js';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, CLASSIFICATIONS, categorize, defaultClassification } from './categories.js';
 import { getApiKey } from './store.js';
 
@@ -65,9 +65,7 @@ export async function currentEngine() {
 
 // ---------- Compra / pagamento ----------
 
-const purchasePrompt = (today) => `Você está lendo o print de uma compra, pagamento ou recebimento (notificação do banco, comprovante Pix, nota fiscal, recibo, tela de fatura ou SMS). Hoje é ${today}.
-Extraia os dados e devolva SOMENTE um objeto JSON com estes campos:
-- "tipo": "gasto" ou "ganho" (ganho = dinheiro que entrou, ex.: Pix recebido)
+const purchaseGuide = () => `- "tipo": "gasto" ou "ganho" (ganho = dinheiro que entrou, ex.: Pix recebido)
 - "valor": valor total da compra em reais (número). Se for parcelado com juros e o print mostrar o valor à vista, use o valor à vista aqui
 - "estabelecimento": nome da loja, pessoa ou empresa (como aparece no print), ou null
 - "descricao": descrição curta e legível em português (ex.: "Padaria Doce Pão"), ou null
@@ -85,7 +83,11 @@ Extraia os dados e devolva SOMENTE um objeto JSON com estes campos:
 - "classificacao": ${Object.keys(CLASSIFICATIONS).join(', ')} (essencial = necessidade básica, superfluo = desejo)
 - "confianca": de 0 a 1, o quanto você tem certeza da leitura
 - "observacao": algo importante que a pessoa deveria conferir (ex.: juros, taxa, valor ilegível), ou null
-Exemplo: {"tipo":"gasto","valor":152.3,"estabelecimento":"PADARIA DOCE PAO","descricao":"Padaria Doce Pão","data":"2026-10-17","hora":"14:32","forma_pagamento":"credito","cartao_final":"4321","cartao_bandeira":"Mastercard","banco":"Nubank","parcelas":3,"valor_parcela":50.77,"valor_a_vista":null,"local":null,"categoria":"restaurantes","classificacao":"superfluo","confianca":0.9,"observacao":null}`;
+`;
+
+const purchasePrompt = (today) => `Você está lendo o print de uma compra, pagamento ou recebimento (notificação do banco, comprovante Pix, nota fiscal, recibo, tela de fatura ou SMS). Hoje é ${today}.
+Extraia os dados e devolva SOMENTE um objeto JSON com estes campos:
+${purchaseGuide()}Exemplo: {"tipo":"gasto","valor":152.3,"estabelecimento":"PADARIA DOCE PAO","descricao":"Padaria Doce Pão","data":"2026-10-17","hora":"14:32","forma_pagamento":"credito","cartao_final":"4321","cartao_bandeira":"Mastercard","banco":"Nubank","parcelas":3,"valor_parcela":50.77,"valor_a_vista":null,"local":null,"categoria":"restaurantes","classificacao":"superfluo","confianca":0.9,"observacao":null}`;
 
 const nullable = (type) => ({ type: [type, 'null'] });
 const PURCHASE_SCHEMA = {
@@ -144,33 +146,133 @@ export function normalizeClaudePurchase(j) {
   };
 }
 
+const NO_CLAUDE = ['not_granted', 'sampling_disabled', 'images_unavailable', 'capability_disabled', 'capability_removed', 'not_declared'];
+
 /**
- * Analisa um print de compra. Retorna { data, engine }.
- * onStatus(texto) recebe o andamento para mostrar na tela.
+ * Lê uma imagem com o melhor motor disponível.
+ * Retorna { json } quando o Claude leu, ou { text } quando foi OCR (o chamador interpreta o texto).
  */
-export async function analyzePurchase(file, { onStatus = () => {}, signal } = {}) {
-  const today = toISO(new Date());
-  const blob = await prepareImage(file);
+async function readImage(file, { prompt, schema, maxSide = 1600, signal, onStatus = () => {} }) {
+  const blob = await prepareImage(file, maxSide);
   const engine = await currentEngine();
   onStatus(`Lendo com ${engine.label}…`);
   if (engine.id === 'claude') {
     try {
       const sample = await getSample();
-      const j = await sample.json(purchasePrompt(today), { images: [blob], signal, cache: false });
-      return { data: normalizeClaudePurchase(j), engine };
+      return { json: await sample.json(prompt, { images: [blob], signal, cache: false }), engine };
     } catch (e) {
       if (e?.code === 'cancelled') throw e;
-      if (!['not_granted', 'sampling_disabled', 'images_unavailable', 'capability_disabled', 'capability_removed', 'not_declared'].includes(e?.code)) throw new Error(sampleErrorText(e));
+      if (!NO_CLAUDE.includes(e?.code)) throw new Error(sampleErrorText(e));
       // sem permissão para usar o Claude: tenta os outros motores
     }
   }
-  if (engine.id === 'api' || (engine.id === 'claude' && getApiKey())) {
-    const j = await callClaudeApi(blob, purchasePrompt(today), PURCHASE_SCHEMA, signal);
-    return { data: normalizeClaudePurchase(j), engine: { id: 'api', label: 'Claude API (sua chave)' } };
-  }
+  if (getApiKey()) return { json: await callClaudeApi(blob, prompt, schema, signal), engine: { id: 'api', label: 'Claude API (sua chave)' } };
   onStatus('Lendo o texto da imagem no aparelho… (a primeira vez demora um pouco)');
-  const text = await ocr(blob, onStatus);
-  return { data: { ...parseReceiptText(text), rawText: text }, engine: { id: 'ocr', label: 'Leitura no aparelho (OCR)' } };
+  return { text: await ocr(blob, onStatus), engine: { id: 'ocr', label: 'Leitura no aparelho (OCR)' } };
+}
+
+/**
+ * Analisa um print de compra. Retorna { data, engine }.
+ * onStatus(texto) recebe o andamento para mostrar na tela.
+ */
+export async function analyzePurchase(file, opts = {}) {
+  const r = await readImage(file, { ...opts, prompt: purchasePrompt(toISO(new Date())), schema: PURCHASE_SCHEMA });
+  return { data: r.json ? normalizeClaudePurchase(r.json) : { ...parseReceiptText(r.text), rawText: r.text }, engine: r.engine };
+}
+
+// ---------- Várias notificações (Mercado Pago, 99, bancos) ----------
+
+const notificationsPrompt = (today) => `Este print mostra uma ou mais notificações ou movimentações financeiras (central de notificações do celular, extrato/atividade do Mercado Pago, 99Pay, 99, banco ou carteira digital). Hoje é ${today}.
+Liste CADA movimentação de dinheiro (Pix enviado ou recebido, pagamento, compra, transferência, corrida da 99, recarga) e devolva SOMENTE {"movimentos": [...]}. Ignore propagandas, ofertas e avisos sem valor.
+Cada item tem estes campos ("banco" é o app de origem: Mercado Pago, 99Pay, Nubank…):
+${purchaseGuide()}`;
+
+const NOTIFICATIONS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['movimentos'],
+  properties: { movimentos: { type: 'array', items: PURCHASE_SCHEMA } },
+};
+
+export async function analyzeNotifications(file, opts = {}) {
+  const r = await readImage(file, { ...opts, maxSide: 2000, prompt: notificationsPrompt(toISO(new Date())), schema: NOTIFICATIONS_SCHEMA });
+  const items = r.json ? (r.json.movimentos || []).map(normalizeClaudePurchase).filter((x) => x.amount > 0) : parseNotifications(r.text);
+  return { items, engine: r.engine };
+}
+
+// ---------- Contrato de empréstimo ----------
+
+const loanPrompt = `Este é um print de um contrato, proposta ou simulação de empréstimo/financiamento (CCB, consignado, empréstimo pessoal, financiamento, Pix parcelado). Extraia as condições e devolva SOMENTE um JSON com:
+- "credor": banco ou financeira, ou null
+- "tipo": um de emprestimo, consignado, financiamento, pix_parcelado, outro
+- "valor_liberado": quanto cai na conta da pessoa (valor líquido), ou null
+- "valor_financiado": valor total financiado/contratado (inclui IOF, tarifas, seguro), ou null
+- "parcelas": número de parcelas, ou null
+- "valor_parcela": valor de cada parcela, ou null
+- "taxa_mensal": taxa de juros ao mês em PERCENTUAL (4,5% = 4.5), ou null
+- "taxa_anual": taxa de juros ao ano em percentual, ou null
+- "cet_mensal": custo efetivo total ao mês em percentual, ou null
+- "cet_anual": CET ao ano em percentual, ou null
+- "iof": valor do IOF em reais, ou null
+- "tarifas": soma de tarifas (cadastro, abertura etc.), ou null
+- "seguro": valor do seguro, ou null
+- "primeiro_vencimento": data da 1ª parcela AAAA-MM-DD, ou null
+- "observacao": cláusula ou custo que merece atenção (seguro embutido, carência, multa), ou null
+- "confianca": de 0 a 1
+Exemplo: {"credor":"Banco Inter","tipo":"emprestimo","valor_liberado":5000,"valor_financiado":5420.5,"parcelas":24,"valor_parcela":372.15,"taxa_mensal":4.5,"taxa_anual":69.59,"cet_mensal":5.32,"cet_anual":86.24,"iof":120.5,"tarifas":300,"seguro":null,"primeiro_vencimento":"2026-11-20","observacao":null,"confianca":0.9}`;
+
+const LOAN_KINDS = ['emprestimo', 'consignado', 'financiamento', 'pix_parcelado', 'outro'];
+const LOAN_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['credor', 'tipo', 'valor_liberado', 'valor_financiado', 'parcelas', 'valor_parcela', 'taxa_mensal', 'taxa_anual', 'cet_mensal', 'cet_anual', 'iof', 'tarifas', 'seguro', 'primeiro_vencimento', 'observacao', 'confianca'],
+  properties: {
+    credor: nullable('string'),
+    tipo: { type: 'string', enum: LOAN_KINDS },
+    valor_liberado: nullable('number'),
+    valor_financiado: nullable('number'),
+    parcelas: nullable('integer'),
+    valor_parcela: nullable('number'),
+    taxa_mensal: nullable('number'),
+    taxa_anual: nullable('number'),
+    cet_mensal: nullable('number'),
+    cet_anual: nullable('number'),
+    iof: nullable('number'),
+    tarifas: nullable('number'),
+    seguro: nullable('number'),
+    primeiro_vencimento: nullable('string'),
+    observacao: nullable('string'),
+    confianca: { type: 'number' },
+  },
+};
+
+const pctToMonthly = (m, a) => (m != null ? m / 100 : a != null ? Math.pow(1 + a / 100, 1 / 12) - 1 : null);
+
+export function normalizeClaudeLoan(j) {
+  const num = (v) => (v != null && +v > 0 ? +v : null);
+  return {
+    creditor: j.credor || null,
+    kind: LOAN_KINDS.includes(j.tipo) ? j.tipo : 'emprestimo',
+    released: num(j.valor_liberado),
+    financed: num(j.valor_financiado),
+    n: num(j.parcelas) ? Math.round(j.parcelas) : null,
+    pmt: num(j.valor_parcela),
+    statedRate: pctToMonthly(num(j.taxa_mensal), num(j.taxa_anual)),
+    statedAnnual: num(j.taxa_anual) ? j.taxa_anual / 100 : null,
+    cetMonthly: pctToMonthly(num(j.cet_mensal), num(j.cet_anual)),
+    cetAnnual: num(j.cet_anual) ? j.cet_anual / 100 : null,
+    iof: num(j.iof),
+    tariff: num(j.tarifas),
+    insurance: num(j.seguro),
+    firstDue: /^\d{4}-\d{2}-\d{2}$/.test(j.primeiro_vencimento || '') ? j.primeiro_vencimento : null,
+    note: j.observacao || null,
+    confidence: typeof j.confianca === 'number' ? j.confianca : null,
+  };
+}
+
+export async function analyzeLoanContract(file, opts = {}) {
+  const r = await readImage(file, { ...opts, maxSide: 2000, prompt: loanPrompt, schema: LOAN_SCHEMA });
+  return { data: r.json ? normalizeClaudeLoan(r.json) : { ...parseLoanText(r.text), rawText: r.text }, engine: r.engine };
 }
 
 // ---------- Serasa ----------
@@ -220,22 +322,9 @@ const normalizeSerasa = (j) =>
       since: /^\d{4}-\d{2}-\d{2}$/.test(d.desde || '') ? d.desde : '',
     }));
 
-export async function analyzeSerasa(file, { onStatus = () => {}, signal } = {}) {
-  const blob = await prepareImage(file, 2000);
-  const engine = await currentEngine();
-  onStatus(`Lendo com ${engine.label}…`);
-  if (engine.id === 'claude') {
-    try {
-      const sample = await getSample();
-      return { debts: normalizeSerasa(await sample.json(serasaPrompt, { images: [blob], signal, cache: false })), engine };
-    } catch (e) {
-      if (e?.code === 'cancelled') throw e;
-      if (!['not_granted', 'sampling_disabled', 'images_unavailable', 'capability_disabled', 'capability_removed', 'not_declared'].includes(e?.code)) throw new Error(sampleErrorText(e));
-    }
-  }
-  if (getApiKey()) return { debts: normalizeSerasa(await callClaudeApi(blob, serasaPrompt, SERASA_SCHEMA, signal)), engine: { id: 'api', label: 'Claude API (sua chave)' } };
-  const text = await ocr(blob, onStatus);
-  return { debts: parseSerasaText(text), engine: { id: 'ocr', label: 'Leitura no aparelho (OCR)' }, rawText: text };
+export async function analyzeSerasa(file, opts = {}) {
+  const r = await readImage(file, { ...opts, maxSide: 2000, prompt: serasaPrompt, schema: SERASA_SCHEMA });
+  return { debts: r.json ? normalizeSerasa(r.json) : parseSerasaText(r.text), engine: r.engine, rawText: r.text };
 }
 
 // ---------- Motores ----------

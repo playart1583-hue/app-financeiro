@@ -14,7 +14,7 @@ export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().to
 const empty = () => ({
   version: 1,
   updatedAt: 0,
-  settings: { name: '', hideValues: false, theme: 'system', savingsRate: 0.008, demo: false },
+  settings: { name: '', hideValues: false, theme: 'system', savingsRate: 0.008, demo: false, autoRegister: true },
   transactions: [],
   budgets: {},
   goals: [],
@@ -116,6 +116,7 @@ export function addTransaction(draft) {
     merchant: draft.merchant || '',
     location: draft.location || '',
     source: draft.source || 'manual',
+    ...(draft.loanId ? { loanId: draft.loanId } : {}),
     createdAt: Date.now(),
   };
   commit((s) => {
@@ -234,6 +235,7 @@ export function deleteGoal(id) {
  */
 export function addLoan(input) {
   const loan = { id: uid(), name: input.name, kind: input.kind || 'emprestimo', mode: input.mode, createdAt: Date.now(), payments: [], source: input.source || 'manual' };
+  for (const k of ['creditor', 'released', 'fees', 'cetMonthly', 'statedRate']) if (input[k] != null && input[k] !== '') loan[k] = input[k];
   if (input.mode === 'parcelado') {
     loan.principal = +input.principal;
     loan.n = Math.max(1, +input.n);
@@ -311,6 +313,40 @@ export function amortizeLoan(id, extra, date = toISO(new Date())) {
     if (n > 0 && Number.isFinite(n)) Object.assign(l, { principal: round2(left), n, paid: 0, firstDue: nextDue, pmt: round2(pricePayment(left, l.rate, n)) });
     else Object.assign(l, { paid: l.n });
     s.transactions.push({ id: uid(), type: 'expense', amount: value, description: `Amortização ${l.name}`, category: 'dividas', classification: 'essencial', date, time: '', method: 'pix', card: '', merchant: '', location: '', source: 'divida', loanId: l.id, createdAt: Date.now() });
+  });
+}
+
+/** Quita antecipadamente um parcelamento (Pix parcelado, cartão): remove as parcelas futuras e lança o valor pago hoje. */
+export function payoffInstallments(groupId, amount, date = toISO(new Date())) {
+  commit((s) => {
+    const list = s.transactions.filter((t) => t.installment?.groupId === groupId);
+    if (!list.length) return;
+    const future = list.filter((t) => t.date > date);
+    const ref = list[0];
+    s.transactions = s.transactions.filter((t) => !future.includes(t));
+    s.transactions.push({
+      ...ref,
+      id: uid(),
+      amount: round2(amount),
+      date,
+      time: '',
+      description: `Quitação antecipada: ${ref.description}`,
+      installment: null,
+      source: 'quitacao',
+      createdAt: Date.now(),
+    });
+  });
+}
+
+/** Lançamento parecido já registrado (mesmo tipo, valor e data próxima): evita duplicar notificações. */
+export function findDuplicate(draft) {
+  const d = new Date((draft.date || toISO(new Date())) + 'T12:00:00');
+  return state.transactions.find((t) => {
+    if (t.type !== draft.type || Math.abs(t.amount - draft.amount) > 0.009) return false;
+    const diff = Math.abs(new Date(t.date + 'T12:00:00') - d) / 86400000;
+    if (diff > 1) return false;
+    if (draft.time && t.time && draft.time !== t.time) return false;
+    return true;
   });
 }
 

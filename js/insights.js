@@ -1,5 +1,5 @@
 // Sugestões automáticas: onde cortar, quanto guardar e como sair das dívidas mais rápido.
-import { averages, monthSummary, projectMonth, projectNextMonths, addMonths, keyOf, debtsForPlan, loanBalance, loanIsOpen, goalSaved, txOfMonth } from './analytics.js';
+import { averages, monthSummary, projectMonth, projectNextMonths, addMonths, keyOf, debtsForPlan, interestCommitments, loanBalance, loanIsOpen, goalSaved, txOfMonth } from './analytics.js';
 import { futureValue, simulatePayoff, monthlyToAnnual } from './finance.js';
 import { getCategory } from './categories.js';
 
@@ -130,7 +130,8 @@ export function buildInsights(state, today = new Date()) {
   // 8. Dívidas: caras, negativadas e plano
   const open = state.loans.filter(loanIsOpen);
   const caras = open.filter((l) => l.mode !== 'acordo' && l.rate >= 0.04).sort((a, b) => b.rate - a.rate);
-  if (caras.length) {
+  // a mais cara já aparece em "Encerre primeiro" quando há valor a economizar: não repete
+  if (caras.length && interestCommitments(state, today).find((c) => !c.interestFree && c.savings > 1)?.id !== caras[0].id) {
     const l = caras[0];
     out.push({
       id: 'divida-cara',
@@ -140,6 +141,30 @@ export function buildInsights(state, today = new Date()) {
       action: { label: 'Plano de quitação', route: 'dividas' },
     });
   }
+  // Pix parcelado e parcelamentos com juros: encerrar antes para não acumular juros
+  const commits = interestCommitments(state, today).filter((c) => !c.interestFree && c.savings > 1);
+  const parcelados = commits.filter((c) => c.source === 'parcelamento');
+  if (commits.length) {
+    const c = commits[0];
+    out.push({
+      id: 'encerrar-antes',
+      level: c.rate >= 0.05 ? 'alerta' : 'atencao',
+      title: `Encerre primeiro: ${c.name} (${pct(c.rate)} ao mês)`,
+      text: `Quitando hoje por cerca de ${brl(c.payoffToday)}, você deixa de pagar ${brl(c.savings)} de juros${c.pmt ? ` e libera ${brl(c.pmt)} por mês` : ''}. Os juros futuros são descontados na quitação antecipada.`,
+      action: { label: 'Ordem para encerrar', route: 'dividas' },
+    });
+  }
+  if (parcelados.length >= 2) {
+    const mensal = parcelados.reduce((s, c) => s + c.pmt, 0);
+    out.push({
+      id: 'parcelados-juros',
+      level: 'atencao',
+      title: `${parcelados.length} parcelamentos com juros ativos (${brl(mensal)} por mês)`,
+      text: 'Evite novos Pix parcelados até encerrar estes. Cada um que você quita libera a parcela para adiantar o próximo.',
+      action: { label: 'Ver parcelamentos', route: 'dividas' },
+    });
+  }
+
   const acordos = open.filter((l) => l.mode === 'acordo' && l.offer);
   if (acordos.length) {
     const best = [...acordos].sort((a, b) => a.offer - b.offer)[0];
@@ -151,7 +176,7 @@ export function buildInsights(state, today = new Date()) {
       action: { label: 'Priorizar no plano', route: 'dividas' },
     });
   }
-  const debts = debtsForPlan(state);
+  const debts = debtsForPlan(state, today);
   if (debts.length >= 2) {
     const folga = Math.max(0, avg.income - avg.expense);
     const minimos = debts.reduce((s, d) => s + (d.minPayment || 0), 0);

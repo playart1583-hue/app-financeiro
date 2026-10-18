@@ -1,10 +1,11 @@
 // Formulário de lançamento (gasto/ganho), leitura de print e registro rápido por texto.
-import { addTransaction, deleteTransaction, getState, restoreTransactions, updateTransaction } from '../store.js';
+import { addTransaction, deleteTransaction, findDuplicate, getState, restoreTransactions, updateTransaction } from '../store.js';
 import { CLASSIFICATIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, categorize, defaultClassification, getCategory } from '../categories.js';
 import { analyzeInstallments } from '../finance.js';
 import { cardLabel, parseQuickEntry, parseReceiptText, toISO } from '../parser.js';
-import { analyzePurchase, currentEngine } from '../receipt.js';
-import { dateBR, esc, html, icon, money, moneyInput, openSheet, pct, readMoney, toast } from '../ui.js';
+import { analyzePurchase } from '../receipt.js';
+import { openReader } from './reader.js';
+import { dateBR, html, icon, money, moneyInput, openSheet, pct, readMoney, toast } from '../ui.js';
 
 const INSTALLMENT_METHODS = ['credito', 'pix_parcelado', 'boleto'];
 
@@ -29,7 +30,7 @@ function extractedBanner(x, engine) {
     x.date && ['clock', 'Quando', `${dateBR(x.date)}${x.time ? ` às ${x.time}` : ''}`],
     !x.date && x.time && ['clock', 'Horário', x.time],
     x.card && (x.card.last4 || x.card.brand || x.card.bank) && ['card', 'Cartão', cardLabel(x.card)],
-    x.method && ['wallet', 'Pagamento', PAYMENT_METHODS[x.method]],
+    x.method && ['wallet', 'Pagamento', `${PAYMENT_METHODS[x.method]}${x.app && !(x.card && x.card.bank) ? ` · ${x.app}` : ''}`],
     x.installments > 1 && ['calc', 'Parcelas', `${x.installments}x${x.installmentValue ? ` de ${money(x.installmentValue, { force: true })}` : ''}`],
     x.amount && ['bolt', 'Valor', money(x.amount, { force: true })],
   ].filter(Boolean);
@@ -68,11 +69,13 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
   if (!v.category) v.category = v.type === 'income' ? 'salario' : 'outros';
   if (!v.classification && v.type === 'expense') v.classification = defaultClassification(v.category);
   let userPickedCategory = Boolean(prefill.category || editing);
+  const dupTx = !editing && extracted && v.amount ? findDuplicate({ type: v.type, amount: +v.amount, date: v.date, time: v.time }) : null;
   const group = editing && (editing.installment || editing.recurringId);
 
   const body = html`<form id="txf" class="form" novalidate>
     ${!editing ? html`<div class="form-shortcuts"><button type="button" class="btn ghost sm" data-print>${icon('camera')} Ler print da compra</button></div>` : ''}
     ${extractedBanner(extracted, engine)}
+    ${dupTx ? html`<p class="status error">${icon('alert')}<span>Parece que você já registrou isso: <b>${dupTx.description}</b> em ${dateBR(dupTx.date)}${dupTx.time ? ` às ${dupTx.time}` : ''}. Salve só se for outra movimentação.</span></p>` : ''}
     <div class="seg" role="radiogroup" aria-label="Tipo">
       <label><input type="radio" name="type" value="expense" ${v.type === 'expense' ? 'checked' : ''}><span>${icon('arrowDown')} Gasto</span></label>
       <label><input type="radio" name="type" value="income" ${v.type === 'income' ? 'checked' : ''}><span>${icon('arrowUp')} Ganho</span></label>
@@ -278,20 +281,20 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
 }
 
 /** Converte o resultado da leitura em pré-preenchimento do formulário. */
-function prefillFromExtract(x) {
+export function prefillFromExtract(x) {
   const type = x.type || 'expense';
   const category = x.category || categorize(`${x.merchant || ''} ${x.description || ''}`, type) || (type === 'income' ? 'outros-ganhos' : 'outros');
   const method = x.method || (x.installments > 1 ? 'credito' : x.card ? 'credito' : 'pix');
   return {
     type,
     amount: x.amount || '',
-    description: x.description ? tidy(x.description) : '',
+    description: x.description ? (/^(Pix|Transferência) (para|de) /.test(x.description) ? x.description : tidy(x.description)) : '',
     category,
     classification: x.classification || (type === 'expense' ? defaultClassification(category) : null),
     date: x.date || toISO(new Date()),
     time: x.time || '',
     method,
-    card: x.card ? cardLabel(x.card) : '',
+    card: x.card && (x.card.last4 || x.card.brand || x.card.bank) ? cardLabel(x.card) : x.app || '',
     merchant: x.merchant || '',
     location: x.location || '',
     installments: x.installments || 1,
@@ -308,79 +311,24 @@ const tidy = (s) =>
     .toLowerCase()
     .replace(/(^|\s)\S/g, (c) => c.toUpperCase());
 
-/** Folha para enviar um print (ou colar o texto) de uma compra. */
-export function openPrintSheet() {
-  let ctl = null;
-  const body = html`<div class="print">
-    <label class="drop" id="p-drop">
-      <input type="file" id="p-file" accept="image/png,image/jpeg,image/webp,image/gif" class="sr-only">
-      ${icon('camera', 'lg')}
-      <b>Escolher print da compra</b>
-      <span>Notificação do banco, comprovante Pix, nota fiscal ou fatura. Também dá para colar a imagem aqui.</span>
-    </label>
-    <p class="hint" id="p-engine"></p>
-    <div id="p-status" class="status" hidden></div>
-    <details class="more"><summary>Prefiro colar o texto</summary>
-      <label class="field"><span>Texto da notificação ou comprovante</span><textarea id="p-text" rows="5" placeholder="Ex.: Compra de R$ 152,30 APROVADA em PADARIA DOCE PAO no cartão final 4321 em 3x. 17/10 às 14:32"></textarea></label>
-      <button type="button" class="btn primary" id="p-read-text">Ler texto</button>
-    </details>
-    <p class="hint">Vou identificar onde, quando, o horário, o cartão, as parcelas e o valor. Você confere tudo antes de salvar.</p>
-  </div>`;
-  openSheet({
+/** Folha para enviar um print (ou colar o texto) de uma compra. `file`/`text` vêm do compartilhamento do celular. */
+export function openPrintSheet({ file, text } = {}) {
+  openReader({
     title: 'Ler print da compra',
-    body,
-    onMount(sheet) {
-      const $ = (s) => sheet.body.querySelector(s);
-      currentEngine().then((e) => ($('#p-engine').textContent = `Leitura com: ${e.label}${e.id === 'ocr' ? '. Para leituras mais precisas, use o app dentro do Claude ou cadastre uma chave em Ajustes.' : ''}`));
-      const status = (text, kind = '') => {
-        const s = $('#p-status');
-        s.hidden = !text;
-        s.className = `status ${kind}`;
-        s.innerHTML = text;
-      };
-      const handle = async (file) => {
-        if (!file || !file.type.startsWith('image/')) return status('Esse arquivo não é uma imagem. Envie um print em JPG ou PNG.', 'error');
-        ctl?.abort();
-        ctl = new AbortController();
-        const url = URL.createObjectURL(file);
-        status(String(html`<img class="thumb" src="${url}" alt="Print enviado"><span class="spinner" aria-hidden="true"></span><span id="p-msg">Analisando o print…</span><button type="button" class="btn ghost sm" id="p-cancel">Cancelar</button>`), 'busy');
-        $('#p-cancel').onclick = () => {
-          ctl.abort();
-          status('');
-        };
-        try {
-          const { data, engine } = await analyzePurchase(file, { signal: ctl.signal, onStatus: (m) => $('#p-msg') && ($('#p-msg').textContent = m) });
-          sheet.close();
-          openTxForm({ prefill: prefillFromExtract(data), extracted: data, engine });
-        } catch (e) {
-          if (e?.code === 'cancelled' || e?.name === 'AbortError') return;
-          status(`${esc(e?.message || 'Não consegui ler esse print.')} Você pode colar o texto abaixo ou preencher manualmente.`, 'error');
-          sheet.body.querySelector('details').open = true;
-        } finally {
-          URL.revokeObjectURL(url);
-        }
-      };
-      $('#p-file').addEventListener('change', (e) => handle(e.target.files[0]));
-      const drop = $('#p-drop');
-      drop.addEventListener('dragover', (e) => (e.preventDefault(), drop.classList.add('over')));
-      drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-      drop.addEventListener('drop', (e) => {
-        e.preventDefault();
-        drop.classList.remove('over');
-        handle(e.dataTransfer.files[0]);
-      });
-      sheet.el.addEventListener('paste', (e) => {
-        const file = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith('image/'));
-        if (file) handle(file);
-      });
-      $('#p-read-text').addEventListener('click', () => {
-        const text = $('#p-text').value.trim();
-        if (!text) return status('Cole o texto da notificação ou do comprovante.', 'error');
-        const data = parseReceiptText(text);
-        if (!data.amount) return status('Não achei o valor nesse texto. Confira se ele tem algo como "R$ 52,30".', 'error');
-        sheet.close();
-        openTxForm({ prefill: prefillFromExtract(data), extracted: data, engine: { label: 'texto colado' } });
-      });
+    dropTitle: 'Escolher print da compra',
+    dropText: 'Notificação do banco, Mercado Pago, 99, comprovante Pix, nota fiscal ou fatura.',
+    textLabel: 'Texto da notificação ou comprovante',
+    textPlaceholder: 'Ex.: Você enviou um Pix de R$ 50,00 para Maria Souza',
+    initialFile: file,
+    initialText: text,
+    analyze: analyzePurchase,
+    parseText: (t) => {
+      const data = parseReceiptText(t);
+      return data.amount ? { data, engine: { label: 'texto colado' } } : { error: 'Não achei o valor nesse texto. Confira se ele tem algo como "R$ 52,30".' };
+    },
+    onResult({ data, engine }, sheet) {
+      sheet.close();
+      openTxForm({ prefill: prefillFromExtract(data), extracted: data, engine });
     },
   });
 }
