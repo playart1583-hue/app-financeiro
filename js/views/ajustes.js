@@ -68,6 +68,7 @@ export default {
 
       <section class="card"><h2 class="card-title">${icon('camera')} Leitura de prints</h2>
         <p id="eng" class="hint">Verificando…</p>
+        <label class="check"><input type="checkbox" id="auto-save" ${st.autoSavePrints !== false ? 'checked' : ''}> <span>Registrar sozinho depois de ler o print (sem tela de conferência; dá para desfazer)</span></label>
         <form class="form" id="keyf">
           <label class="field"><span>Chave da API do Claude (opcional)</span><input name="key" type="password" autocomplete="off" placeholder="sk-ant-…" value="${key ? '••••••••' + key.slice(-4) : ''}"></label>
           <p class="hint">Só é necessária fora do app da Claude. A chave fica guardada apenas neste aparelho e é usada para enviar o print direto à API da Anthropic. Sem chave, a leitura é feita no próprio aparelho (OCR), com menos precisão.</p>
@@ -149,6 +150,10 @@ export default {
         toast(`Cartão ${b.dataset.cardDel} removido`);
       }),
     );
+    root.querySelector('#auto-save').addEventListener('change', (e) => {
+      updateSettings({ autoSavePrints: e.target.checked });
+      toast(e.target.checked ? 'Prints serão registrados sozinhos' : 'Vou mostrar para você conferir antes de salvar');
+    });
     root.querySelector('#keyf').addEventListener('submit', (e) => {
       e.preventDefault();
       const v = e.target.key.value.trim();

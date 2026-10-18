@@ -131,7 +131,7 @@ export function findCard(text) {
   const t = normalize(text);
   // "final 8238", "terminado em 8238", "**** 8238", "•••• 8238", "Cartão 8238", "Cartão: 8238", "Visa 8238"
   const m =
-    t.match(/(?:final|terminad[oa] em|\*{2,}\s?|x{4}\s?|•{2,}\s?|\.{3,}\s?)\s*:?\s*(\d{4})\b/) ||
+    t.match(/(?:final|terminad[oa] em|terminando em|termina em|com final|\*{2,}\s?|x{4}\s?|•{2,}\s?|\.{3,}\s?)\s*:?\s*(\d{4})\b/) ||
     t.match(/\bcart[aã]o(?:\s+(?:de\s+)?(?:credito|debito|virtual|fisico|adicional))?\s*(?:n[ºo°.]*|:|-)?\s*(\d{4})(?![\d.,/:])/) ||
     t.match(/\b(?:visa|mastercard|master|elo|hipercard|amex)\s*(?:\*+|•+|-|:)?\s*(\d{4})(?![\d.,/:])/);
   const brand = BRANDS.find((b) => new RegExp(`\\b${b}\\b`).test(t));
@@ -148,6 +148,12 @@ export function cardLabel(card) {
   if (!card) return '';
   return [card.bank, card.brand, card.last4 ? `final ${card.last4}` : null].filter(Boolean).join(' · ');
 }
+
+const STORES = [
+  ['amazon', 'Amazon'], ['mercado livre', 'Mercado Livre'], ['mercadolivre', 'Mercado Livre'], ['shopee', 'Shopee'], ['shein', 'Shein'], ['aliexpress', 'AliExpress'], ['temu', 'Temu'],
+  ['magazine luiza', 'Magazine Luiza'], ['magalu', 'Magalu'], ['americanas', 'Americanas'], ['casas bahia', 'Casas Bahia'], ['kabum', 'KaBuM!'], ['netshoes', 'Netshoes'], ['centauro', 'Centauro'],
+  ['carrefour', 'Carrefour'], ['assai', 'Assaí'], ['atacadao', 'Atacadão'], ['ifood', 'iFood'], ['rappi', 'Rappi'], ['drogasil', 'Drogasil'], ['pague menos', 'Pague Menos'],
+];
 
 const MERCHANT_LABEL = /^(?:estabelecimento|loja|local|comercio|favorecido|recebedor|destinatario|para|nome|beneficiario|empresa)(?:\s*[:\-]\s*(.+))?$/i;
 
@@ -204,10 +210,16 @@ export function parseReceiptText(text, today = new Date()) {
       counterpartLabel = flowDirection(t) === 'income' ? `${what} de ${merchant}` : `${what} para ${merchant}`;
     }
   }
+  // lojas conhecidas que aparecem no print (Amazon, Mercado Livre, Shopee...)
+  if (!merchant) merchant = STORES.find(([k]) => new RegExp(`(^|[^a-z])${k}([^a-z]|$)`).test(t))?.[1] || null;
   if (!merchant) {
-    // notificação: "Compra aprovada ... em PADARIA DOCE PAO" / "no(a) LOJA X"
-    const m = original.match(/\b(?:em|no|na|no\(a\))\s+([A-Z0-9][A-Z0-9 &*.'\-]{2,40})(?=\s+(?:para|com|em|no|na|dia|às|as|valor|r\$)\b|[.,\n]|$)/);
-    if (m) merchant = m[1].trim();
+    // notificação: "Compra aprovada ... em PADARIA DOCE PAO" / "no(a) LOJA X" (não vale "terminando em 2223")
+    for (const m of original.matchAll(/\b(?:em|no|na|no\(a\))\s+([A-Z0-9][A-Z0-9 &*.'\-]{2,40})(?=\s+(?:para|com|em|no|na|dia|às|as|valor|r\$)\b|[.,\n]|$)/g)) {
+      const before = normalize(original.slice(Math.max(0, m.index - 14), m.index));
+      if (/^\d[\d\s]*$/.test(m[1].trim()) || /termin\w*\s*$|final\s*$/.test(before)) continue;
+      merchant = m[1].trim();
+      break;
+    }
   }
   if (merchant) merchant = merchant.replace(/\s{2,}/g, ' ').replace(/[*]+/g, ' ').trim();
 
@@ -221,7 +233,7 @@ export function parseReceiptText(text, today = new Date()) {
   const app = findApp(t);
   if (!merchant && app === '99' && /corrida|viagem/.test(t)) merchant = 'Corrida 99';
   const desc = merchant || lines[0] || '';
-  const category = categorize(desc, income ? 'income' : 'expense') || categorize(original, income ? 'income' : 'expense');
+  const category = categorize(desc, income ? 'income' : 'expense') || categorize(original.replace(/sem juros/gi, ''), income ? 'income' : 'expense');
 
   let cashPrice = null;
   const cash = original.match(/(?:a vista|à vista|valor original|valor do produto|preco a vista)\D{0,15}(\d{1,3}(?:\.\d{3})*,\d{2}|\d+[.,]\d{2})/i);

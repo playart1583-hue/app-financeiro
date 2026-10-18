@@ -401,15 +401,75 @@ export function openPrintSheet({ file, files, text } = {}) {
     },
     onResult({ data, engine }, sheet) {
       sheet.close();
+      // registra sozinho; só abre o formulário se faltar o valor, se parecer repetido ou se você desligou isso em Ajustes
+      if (autoSave()) {
+        const r = saveFromPrint(data);
+        if (r.saved) return announceSaved([r]);
+      }
       openTxForm({ prefill: prefillFromExtract(data), extracted: data, engine });
     },
-    // vários prints: um lançamento por print, numa lista para conferir e salvar de uma vez
+    // vários prints: registra cada um sozinho (ou numa lista para conferir, se o registro automático estiver desligado)
     onMany(results, sheet) {
+      if (autoSave()) {
+        sheet.close();
+        const saved = results.map(({ data }) => saveFromPrint(data));
+        return announceSaved(saved);
+      }
       const movements = results.map(({ data }) => purchaseMovement(data)).filter((m) => m.amount > 0);
       if (!movements.length) return sheet.status('Não achei valores nesses prints.', 'error');
       reviewMovements({ label: `${results.length} prints · ${results[0].engine?.label || ''}`, movements }, sheet);
     },
   });
+}
+
+const autoSave = () => getState().settings.autoSavePrints !== false;
+
+/**
+ * Salva direto o que foi lido de um print: valor, data, parcelas, cartão (final + banco cadastrado) e,
+ * no crédito com o cartão cadastrado, o mês em que a fatura vence. Repetido ou sem valor não salva.
+ */
+export function saveFromPrint(data) {
+  const p = prefillFromExtract(data);
+  const amount = +p.amount;
+  if (!(amount > 0)) return { saved: false, reason: 'sem valor', data };
+  const info = cardInfo(p.last4);
+  const n = p.type === 'expense' && INSTALLMENT_METHODS.includes(p.method) ? Math.max(1, Math.min(72, p.installments || 1)) : 1;
+  const draft = {
+    ...p,
+    amount,
+    description: p.description || p.merchant || getCategory(p.category).name,
+    card: p.last4 ? cardText(p.last4, info?.bank || p.bank) : p.card,
+    firstDue: p.type === 'expense' && (n > 1 || p.method === 'credito') ? dueFor(p.date, info) : '',
+    installments: n,
+    installmentValue: n > 1 && p.installmentValue > 0 ? +p.installmentValue : null,
+    source: 'print',
+  };
+  if (findDuplicate({ type: draft.type, amount: n > 1 ? draft.installmentValue || amount / n : amount, date: draft.date, time: draft.time, installment: n > 1 ? { i: 1, n } : null, last4: draft.last4, description: draft.description }))
+    return { saved: false, reason: 'repetido', data, draft };
+  rememberCard(draft.last4, { bank: info?.bank ? '' : p.bank });
+  return { saved: true, ids: addTransaction(draft), draft, known: Boolean(info?.dueDay) };
+}
+
+/** Aviso do que foi registrado, com Desfazer; o que não deu para salvar abre para você completar. */
+function announceSaved(results) {
+  const ok = results.filter((r) => r.saved);
+  const left = results.filter((r) => !r.saved);
+  const ids = ok.flatMap((r) => r.ids);
+  if (ok.length) {
+    const d = ok[0].draft;
+    const one = `${d.description} · ${money(d.amount, { force: true })}${d.installments > 1 ? ` em ${d.installments}x` : ''}${d.last4 ? ` · cartão ${d.last4}` : ''}${d.firstDue ? ` · vence ${dateBR(d.firstDue)}` : ''}`;
+    const unknown = ok.find((r) => r.draft.last4 && r.draft.method === 'credito' && !r.known);
+    const tip = unknown ? ` Cadastre o cartão ${unknown.draft.last4} (fechamento e vencimento) em Ajustes para ir ao mês da fatura.` : '';
+    toast(`${ok.length === 1 ? `Registrado: ${one}` : `${ok.length} lançamentos registrados`}${left.length ? ` · ${left.length} não registrado${left.length > 1 ? 's' : ''}` : ''}.${tip}`, {
+      action: 'Desfazer',
+      onAction: () => ids.forEach((id) => deleteTransaction(id)),
+      timeout: tip ? 12000 : 8000,
+    });
+  }
+  // repetido ou sem valor: abre o primeiro para você decidir (os outros ficam no aviso)
+  const first = left[0];
+  if (first) openTxForm({ prefill: prefillFromExtract(first.data), extracted: first.data, engine: { label: first.reason === 'repetido' ? 'print (parece repetido)' : 'print' } });
+  else if (!ok.length) toast('Não achei valores nesses prints.');
 }
 
 /** Compra lida de um print -> linha da lista de conferência (parcelada: o valor da 1ª parcela). */

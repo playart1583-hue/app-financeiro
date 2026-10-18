@@ -36,3 +36,9 @@ test('reconhece o final do cartão em formatos diferentes', async () => {
     assert.equal(findCard(t)?.last4, '8238', t);
   assert.equal(findCard('Total R$ 1.234,56 em 10/10/2026')?.last4 ?? null, null);
 });
+
+test('print da Amazon: "Visa terminando em 2223", 6x, sem confundir o final com a loja', async () => {
+  const { parseReceiptText } = await import('../js/parser.js');
+  const r = parseReceiptText('Pesquisar na Amazon.com.br\nResumo do pedido\nPedido realizado 14 de outubro de 2026\nTotal geral: R$ 218,00\nForma de pagamento\nVisa terminando em 2223\nEm 6x de R$ 36,35 sem juros', new Date(2026, 9, 18));
+  assert.deepEqual([r.amount, r.date, r.method, r.card?.last4, r.installments, r.merchant, r.category], [218, '2026-10-14', 'credito', '2223', 6, 'Amazon', 'compras']);
+});
