@@ -78,7 +78,7 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
     ${!editing ? html`<div class="form-shortcuts"><button type="button" class="btn ghost sm" data-print>${icon('camera')} Ler print da compra</button></div>` : ''}
     ${extractedBanner(extracted, engine)}
     ${dupTx ? html`<p class="status error">${icon('alert')}<span>Parece que você já registrou isso: <b>${dupTx.description}</b> em ${dateBR(dupTx.date)}${dupTx.time ? ` às ${dupTx.time}` : ''}. Salve só se for outra movimentação.</span></p>` : ''}
-    <div class="seg" role="radiogroup" aria-label="Tipo">
+    <div class="seg three type-seg" role="radiogroup" aria-label="Tipo">
       <label><input type="radio" name="type" value="expense" ${v.type === 'expense' && !v.internal ? 'checked' : ''}><span>${icon('arrowDown')} Gasto</span></label>
       <label><input type="radio" name="type" value="income" ${v.type === 'income' && !v.internal ? 'checked' : ''}><span>${icon('arrowUp')} Ganho</span></label>
       <label><input type="radio" name="type" value="transfer" ${v.internal ? 'checked' : ''}><span>↔ Entre contas</span></label>

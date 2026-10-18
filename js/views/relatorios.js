@@ -14,7 +14,7 @@ export default {
     const months = [-5, -4, -3, -2, -1, 0].map((d) => {
       const k = addMonths(key, d);
       const s = monthSummary(state, k);
-      return { label: monthName(k), short: monthName(k, true).slice(0, 3), a: s.income, b: s.expense };
+      return { label: monthName(k), short: monthName(k, true).slice(0, 3), abbr: monthName(k, true), a: s.income, b: s.expense };
     });
     const next = projectNextMonths(state, new Date(), 6);
     const top = [...sum.txs].filter((t) => t.type === 'expense').sort((a, b) => b.amount - a.amount).slice(0, 5);
@@ -47,7 +47,7 @@ export default {
           ? hbars(
               sum.byCategory.map((c) => {
                 const limit = state.budgets[c.id];
-                return { label: getCategory(c.id).name, icon: getCategory(c.id).icon, value: c.total, sub: `${pct(c.total / sum.expense)}${limit ? ` · limite ${money(limit)}` : ''}`, limit, over: limit && c.total > limit };
+                return { label: getCategory(c.id).name, icon: getCategory(c.id).icon, value: c.total, sub: pct(c.total / sum.expense), note: limit ? `Limite ${money(limit)}${c.total > limit ? ` · passou ${money(c.total - limit)}` : ''}` : '', limit, over: limit && c.total > limit };
               }),
             )
           : emptyState('Sem gastos neste mês', 'Os gastos aparecem aqui separados por categoria.')}
@@ -70,8 +70,8 @@ export default {
       <section class="card"><h2 class="card-title">Receitas e despesas, últimos 6 meses</h2>
         ${columns(months, { aName: 'Receitas', bName: 'Despesas' })}
         <details class="more"><summary>Ver tabela</summary>
-          <div class="table-wrap"><table><thead><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Saldo</th></tr></thead>
-          <tbody>${months.map((m) => html`<tr><td>${m.label}</td><td>${money(m.a)}</td><td>${money(m.b)}</td><td class="${m.a - m.b < 0 ? 'expense' : ''}">${money(m.a - m.b)}</td></tr>`)}</tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Mês</th><th>Receitas (R$)</th><th>Despesas (R$)</th><th>Saldo (R$)</th></tr></thead>
+          <tbody>${months.map((m) => html`<tr><td>${m.abbr}</td><td>${money(m.a, { bare: true })}</td><td>${money(m.b, { bare: true })}</td><td class="${m.a - m.b < 0 ? 'expense' : ''}">${money(m.a - m.b, { bare: true })}</td></tr>`)}</tbody></table></div>
         </details>
       </section>
 
@@ -81,8 +81,8 @@ export default {
           next.map((m) => ({ label: monthName(m.key), short: monthName(m.key, true).slice(0, 3), a: m.committed, b: m.variable, marker: m.income })),
           { aName: 'Compromissos', bName: 'Dia a dia e contas (estimado)', stacked: true, markerName: 'Renda prevista' },
         )}
-        <div class="table-wrap"><table><thead><tr><th>Mês</th><th>Compromissos</th><th>Total previsto</th><th>Sobra</th></tr></thead>
-          <tbody>${next.map((m) => html`<tr><td>${monthName(m.key, true)}</td><td>${money(m.committed)}</td><td>${money(m.total)}</td><td class="${m.balance < 0 ? 'expense' : 'income'}">${money(m.balance)}</td></tr>`)}</tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Mês</th><th>Compromissos (R$)</th><th>Previsto (R$)</th><th>Sobra (R$)</th></tr></thead>
+          <tbody>${next.map((m) => html`<tr><td>${monthName(m.key, true)}</td><td>${money(m.committed, { bare: true })}</td><td>${money(m.total, { bare: true })}</td><td class="${m.balance < 0 ? 'expense' : 'income'}">${money(m.balance, { bare: true })}</td></tr>`)}</tbody></table></div>
       </section>
 
       ${top.length

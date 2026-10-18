@@ -66,11 +66,11 @@ export default {
 
       <section class="card"><h2 class="card-title">${icon('shield')} Seus dados</h2>
         <p class="hint" id="sync">${SYNC[cloud.status]}</p>
-        <div class="btn-row">
+        <div class="btn-row even">
           <button type="button" class="btn sm" id="exp">${icon('upload')} Exportar backup</button>
           <label class="btn sm">Importar backup<input type="file" id="imp" accept="application/json,.json" class="sr-only"></label>
         </div>
-        <div class="btn-row">
+        <div class="btn-row even">
           ${st.demo ? '' : html`<button type="button" class="btn ghost sm" id="demo">Carregar dados de exemplo</button>`}
           <button type="button" class="btn danger ghost sm" id="reset">${icon('trash')} Apagar tudo</button>
         </div>

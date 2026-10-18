@@ -24,8 +24,8 @@ export default {
       <section class="card">
         <h2 class="card-title">${icon('calc')} Quanto fica a parcela com uma taxa?</h2>
         <p class="hint">Útil para comparar ofertas: Pix parcelado costuma cobrar de 3% a 9% ao mês; cartão parcelado com juros, de 2% a 9%.</p>
-        <div class="table-wrap"><table><thead><tr><th>Taxa a.m.</th>${[3, 6, 10, 12].map((n) => html`<th>${n}x</th>`)}</tr></thead>
-          <tbody>${[0.02, 0.04, 0.06, 0.08].map((r) => html`<tr><td>${pct(r)}</td>${[3, 6, 10, 12].map((n) => html`<td>${money(pricePayment(s.cash || 0, r, n), { force: true })}</td>`)}</tr>`)}</tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Taxa a.m.</th>${[3, 6, 10, 12].map((n) => html`<th>${n}x (R$)</th>`)}</tr></thead>
+          <tbody>${[0.02, 0.04, 0.06, 0.08].map((r) => html`<tr><td>${pct(r)}</td>${[3, 6, 10, 12].map((n) => html`<td>${money(pricePayment(s.cash || 0, r, n), { force: true, bare: true })}</td>`)}</tr>`)}</tbody></table></div>
         <p class="hint">Valores para um preço à vista de ${money(s.cash || 0, { force: true })}. Seu cofrinho rende cerca de ${pct(rate, 2)} ao mês (ajuste em Ajustes).</p>
       </section>`;
   },

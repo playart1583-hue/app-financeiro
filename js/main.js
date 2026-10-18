@@ -25,9 +25,8 @@ const TABS = [
   null,
   ['relatorios', 'chart', 'Relatórios'],
   ['planejar', 'target', 'Planejar'],
-  ['ajustes', 'gear', 'Ajustes'],
 ];
-const TAB_OF = { dicas: 'planejar', cofrinhos: 'planejar', dividas: 'planejar', pix: 'planejar', orcamentos: 'planejar' };
+const TAB_OF = { dicas: 'planejar', cofrinhos: 'planejar', dividas: 'planejar', pix: 'planejar', orcamentos: 'planejar', ajustes: 'planejar' };
 
 const ui = { route: 'inicio', month: keyOf(new Date()), filter: 'all', query: '' };
 // telas abertas dentro do app desde que ele abriu: o voltar do Android percorre só estas
@@ -69,11 +68,13 @@ function render({ keepFocus } = {}) {
   const ctx = { state, ui, go, rerender: render };
   const caret = keepFocus ? document.querySelector(keepFocus)?.selectionStart : null;
   const back = view.back ? html`<button type="button" class="back" data-go="${view.back}">${icon('chevL')} Voltar</button>` : '';
+  // Ajustes sempre à mão, no canto de cima de toda tela (o Início já tem o seu no cabeçalho verde)
+  const gear = view.id === 'inicio' || view.id === 'ajustes' ? '' : html`<button type="button" class="icon-btn page-gear" data-go="ajustes" aria-label="Ajustes">${icon('gear')}</button>`;
   // um contêiner novo a cada render: os listeners de bind() não se acumulam
   const page = document.createElement('div');
   page.className = 'page';
   page.dataset.view = view.id;
-  page.innerHTML = String(back) + String(view.render(ctx));
+  page.innerHTML = String(gear) + String(back) + String(view.render(ctx));
   viewEl.replaceChildren(page);
   view.bind?.(page, ctx);
   if (keepFocus) {

@@ -142,7 +142,7 @@ export default {
         <div><small>Por mês</small><b>${money(monthly)}</b></div>
         <div><small>Juros no mês</small><b class="expense">${money(juros)}</b></div>
       </div>
-      <div class="btn-row">
+      <div class="btn-row column">
         <button type="button" class="btn primary" data-act="add">${icon('plus')} Adicionar dívida</button>
         <button type="button" class="btn" data-act="serasa">${icon('shield')} Importar do Serasa</button>
         <button type="button" class="btn" data-act="contract">${icon('camera')} Analisar contrato de empréstimo</button>

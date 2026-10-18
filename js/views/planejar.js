@@ -16,7 +16,7 @@ export default {
     const budgets = Object.keys(state.budgets).length;
     const over = Object.entries(state.budgets).filter(([c, l]) => (sum.byCategory.find((x) => x.id === c)?.total || 0) > l).length;
     const tips = buildInsights(state).filter((i) => i.level !== 'ok').length;
-    const tile = (route, ic, title, text, badge = '') => html`<button type="button" class="tile" ${['emprestimo', 'arquivo'].includes(route) ? html`data-open="${route}"` : html`data-go="${route}"`}><span class="tile-ic">${icon(ic)}</span><span class="tile-main"><b>${title}</b><small>${text}</small></span>${badge}${icon('chevR', 'muted')}</button>`;
+    const tile = (route, ic, title, text, badge = '') => html`<button type="button" class="tile" ${['emprestimo', 'arquivo'].includes(route) ? html`data-open="${route}"` : html`data-go="${route}"`}><span class="tile-ic">${icon(ic)}</span><span class="tile-main"><b>${title}</b><small>${text}</small>${badge ? html`<span class="tile-badge">${badge}</span>` : ''}</span>${icon('chevR', 'muted')}</button>`;
     return html`<header class="page-head"><h1>Planejar</h1><p>Organize metas, dívidas e limites de gasto.</p></header>
       <div class="tiles">
         ${tile('dividas', 'bank', 'Dívidas e empréstimos', open.length ? `${money(debt)} em aberto · plano para quitar` : 'Cadastre empréstimos, cartão e dívidas do Serasa', negativadas ? html`<span class="pill bad">${negativadas} negativada${negativadas > 1 ? 's' : ''}</span>` : '')}

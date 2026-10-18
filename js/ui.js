@@ -17,9 +17,10 @@ export const html = (strings, ...vals) => raw(strings.reduce((out, s, i) => out 
 // ---------- Formatação ----------
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 export const brl = (v) => BRL.format(Number.isFinite(v) ? v : 0);
-export function money(v, { sign = false, force = false } = {}) {
-  if (!force && getState().settings.hideValues) return 'R$ ••••';
-  const s = brl(Math.abs(v));
+export function money(v, { sign = false, force = false, bare = false } = {}) {
+  if (!force && getState().settings.hideValues) return bare ? '••••' : 'R$ ••••';
+  // bare: sem o "R$", para tabelas estreitas (o cabeçalho diz que é em reais)
+  const s = bare ? brl(Math.abs(v)).replace(/^R\$\s*/, '') : brl(Math.abs(v));
   if (!sign) return v < 0 ? `-${s}` : s;
   return v < 0 ? `- ${s}` : `+ ${s}`;
 }
@@ -188,8 +189,9 @@ export function hbars(items, { max } = {}) {
   const top = max || Math.max(...items.map((i) => i.value), 1);
   return html`<ul class="hbars">${items.map(
     (i) => html`<li>
-      <div class="hbar-head"><span class="hbar-label">${i.icon ? html`<span class="cat-dot" aria-hidden="true">${i.icon}</span>` : ''}${i.label}</span><span class="hbar-val">${money(i.value)}${i.sub ? html` <small>${i.sub}</small>` : ''}</span></div>
+      <div class="hbar-head"><span class="hbar-label">${i.icon ? html`<span class="cat-dot" aria-hidden="true">${i.icon}</span>` : ''}<span class="hbar-text">${i.label}</span></span><span class="hbar-val">${money(i.value)}${i.sub ? html` <small>${i.sub}</small>` : ''}</span></div>
       <div class="hbar-track"><div class="hbar-fill${i.over ? ' over' : ''}" style="width:${Math.max(1.5, (i.value / top) * 100).toFixed(1)}%" tabindex="0" data-tip="${`<b>${esc(i.label)}</b><br>${money(i.value)}${i.sub ? ` · ${esc(i.sub)}` : ''}`}"></div>${i.limit ? html`<span class="hbar-limit" style="left:${Math.min(100, (i.limit / top) * 100).toFixed(1)}%" title="Limite"></span>` : ''}</div>
+      ${i.note ? html`<small class="hbar-note">${i.note}</small>` : ''}
     </li>`,
   )}</ul>`;
 }
