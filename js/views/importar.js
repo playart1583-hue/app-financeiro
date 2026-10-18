@@ -2,6 +2,7 @@
 // quando o texto chega por automação do celular ou pelo menu "Compartilhar".
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, defaultClassification, getCategory } from '../categories.js';
 import { flipPatch, learnedType } from '../learn.js';
+import { classifyTransfer } from '../transfers.js';
 import { parseNotifications, parseReceiptText } from '../parser.js';
 import { analyzeNotifications } from '../receipt.js';
 import { addTransaction, deleteTransaction, findDuplicate, getState } from '../store.js';
@@ -89,9 +90,14 @@ export function ingestExternalText(text, { silent = false } = {}) {
   const auto = getState().settings.autoRegister !== false;
   const drafts = items.map(draftOf);
   if (!auto || drafts.some((d) => findDuplicate(d))) return items.length === 1 && !auto ? openTxForm({ prefill: prefillFromExtract(items[0]), extracted: items[0], engine: { label: 'notificação' } }) : openNotificationsImport({ text });
-  const ids = drafts.flatMap((d) => addTransaction(d));
+  // entre contas suas (ou a outra ponta já registrada): não conta como gasto nem ganho
+  const ids = [];
+  for (let k = 0; k < drafts.length; k++) {
+    drafts[k] = classifyTransfer(drafts[k]);
+    ids.push(...addTransaction(drafts[k]));
+  }
   const first = drafts[0];
-  toast(drafts.length === 1 ? `Registrado: ${first.type === 'income' ? 'ganho' : 'gasto'} de ${money(first.amount, { force: true })} · ${first.description}` : `${drafts.length} lançamentos registrados da notificação`, {
+  toast(drafts.length === 1 ? `Registrado: ${first.internal ? 'transferência entre suas contas (não conta como gasto nem ganho)' : first.type === 'income' ? 'ganho' : 'gasto'} de ${money(first.amount, { force: true })} · ${first.description}` : `${drafts.length} lançamentos registrados da notificação`, {
     action: 'Desfazer',
     onAction: () => ids.forEach((id) => deleteTransaction(id)),
     timeout: 8000,

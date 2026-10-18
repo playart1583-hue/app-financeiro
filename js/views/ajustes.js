@@ -1,4 +1,5 @@
 import { monthlyToAnnual } from '../finance.js';
+import { normalize } from '../categories.js';
 import { currentEngine } from '../receipt.js';
 import { cloud, exportJSON, getApiKey, importJSON, loadDemo, resetAll, setApiKey, updateSettings } from '../store.js';
 import { html, icon, pct, toast } from '../ui.js';
@@ -79,6 +80,8 @@ export default {
     return html`<header class="page-head"><h1>Ajustes</h1></header>
       <section class="card"><form class="form" id="setf">
         <label class="field"><span>Seu nome</span><input name="name" value="${st.name}" autocomplete="given-name"></label>
+        <label class="field"><span>Seu nome completo, como aparece no Pix</span><input name="ownNames" value="${(st.ownNames || []).join(', ')}" autocomplete="name" placeholder="Ex.: Maria Aparecida Souza"></label>
+        <p class="hint">Assim o app reconhece Pix e TED entre as suas contas (ex.: Santander → Mercado Pago) e não conta como gasto nem ganho. Se tiver mais de um, separe por vírgula.</p>
         <fieldset class="field"><legend>Tema</legend><div class="seg three" role="radiogroup">${[['system', 'Automático'], ['light', 'Claro'], ['dark', 'Escuro']].map(([k, l]) => html`<label><input type="radio" name="theme" value="${k}" ${st.theme === k ? 'checked' : ''}><span>${l}</span></label>`)}</div></fieldset>
         <label class="check"><input type="checkbox" name="hideValues" ${st.hideValues ? 'checked' : ''}> <span>Ocultar valores ao abrir</span></label>
         <label class="field"><span>Rendimento do cofrinho (% ao mês)</span><input name="savingsRate" inputmode="decimal" value="${(st.savingsRate * 100).toFixed(2).replace('.', ',')}"></label>
@@ -138,7 +141,11 @@ export default {
     root.querySelector('#setf').addEventListener('change', (e) => {
       const f = e.currentTarget;
       const rate = parseFloat(String(f.savingsRate.value).replace(',', '.')) / 100;
-      updateSettings({ name: f.elements.name.value.trim(), theme: f.querySelector('[name=theme]:checked').value, hideValues: f.hideValues.checked, savingsRate: rate >= 0 && rate < 0.2 ? rate : state.settings.savingsRate });
+      const ownNames = f.elements.ownNames.value
+        .split(',')
+        .map((x) => normalize(x).replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim())
+        .filter((x) => x.split(' ').length >= 2);
+      updateSettings({ ownNames, name: f.elements.name.value.trim(), theme: f.querySelector('[name=theme]:checked').value, hideValues: f.hideValues.checked, savingsRate: rate >= 0 && rate < 0.2 ? rate : state.settings.savingsRate });
       toast('Ajustes salvos');
     });
     if (nativeReader) {

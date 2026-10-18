@@ -1,6 +1,7 @@
 // Formulário de lançamento (gasto/ganho), leitura de print e registro rápido por texto.
 import { addTransaction, deleteTransaction, findDuplicate, getState, restoreTransactions, updateTransaction } from '../store.js';
 import { flipAll, learnFlow, similarFlow, swapLabel } from '../learn.js';
+import { markOwnTransfer } from '../transfers.js';
 import { CLASSIFICATIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, categorize, defaultClassification, getCategory } from '../categories.js';
 import { analyzeInstallments } from '../finance.js';
 import { cardLabel, parseQuickEntry, parseReceiptText, toISO } from '../parser.js';
@@ -108,6 +109,7 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
         <div id="f-juros" class="juros" hidden></div>
         <label class="check" id="f-rec-wrap"><input type="checkbox" id="f-rec" name="recurring"> <span>Repetir todo mês (conta fixa, salário)</span></label>`
       : ''}
+    <label class="check"><input type="checkbox" id="f-internal" name="internal" ${v.internal ? 'checked' : ''}> <span>Transferência entre minhas contas (ex.: Santander → Mercado Pago). Não conta como gasto nem ganho.</span></label>
     <details class="more" ${extracted || v.merchant ? 'open' : ''}><summary>Mais detalhes</summary>
       <div class="row2">
         <label class="field"><span>Estabelecimento</span><input id="f-merchant" name="merchant" value="${v.merchant || ''}" autocomplete="off"></label>
@@ -261,12 +263,18 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           card: val('card')?.trim() || '',
           merchant: val('merchant')?.trim() || '',
           location: val('location')?.trim() || '',
+          internal: f.querySelector('#f-internal').checked,
         };
         if (editing) {
           const { amount: _a, ...rest } = draft;
           const before = { ...editing }; // updateTransaction altera o próprio objeto
           updateTransaction(editId, { ...rest, amount }, { wholeGroup: f.querySelector('#f-group')?.checked });
           sheet.close();
+          if (draft.internal && !before.internal) {
+            // lembra seu nome e marca a outra ponta (o Pix que saiu de um app e entrou no outro)
+            const pair = markOwnTransfer({ ...before, ...draft, id: editId });
+            return toast(pair ? 'Marcado como transferência entre suas contas, junto com a outra ponta. Não conta mais como gasto nem ganho.' : 'Marcado como transferência entre suas contas. Não conta mais como gasto nem ganho.');
+          }
           // corrigiu receita/despesa de uma notificação: aprende e oferece corrigir as parecidas
           if (before.source === 'notificacao' && before.type !== type) {
             learnFlow(before, type);

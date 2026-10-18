@@ -299,6 +299,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); out
 .tx-val { font: 800 14px var(--font-num); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tx-val.income { color: var(--income); }
 .tx-val.expense { color: var(--text); }
+.tx-val.neutral { color: var(--muted); }
 .day { display: grid; gap: 6px; }
 .day-head { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; color: var(--muted); padding: 0 4px; }
 .toolbar { display: grid; gap: 10px; }

@@ -1,4 +1,4 @@
-import { monthSummary } from '../analytics.js';
+import { monthKey, monthSummary } from '../analytics.js';
 import { PAYMENT_METHODS, getCategory, normalize } from '../categories.js';
 import { toISO } from '../parser.js';
 import { dayLabel, emptyState, html, icon, money, monthName } from '../ui.js';
@@ -8,6 +8,13 @@ import { openFileImport } from './arquivo.js';
 export function txRow(t, compact = false) {
   const c = getCategory(t.category);
   const sign = t.type === 'income' ? 1 : -1;
+  if (t.internal) {
+    return html`<li><button type="button" class="tx" data-tx="${t.id}">
+    <span class="tx-ic" aria-hidden="true">↔️</span>
+    <span class="tx-main"><b>${t.description || 'Transferência entre suas contas'}</b><small>Entre suas contas · não conta como gasto nem ganho${t.time ? ` · ${t.time}` : ''}</small></span>
+    <span class="tx-val neutral">${money(t.amount)}</span>
+  </button></li>`;
+  }
   const meta = [
     t.time,
     PAYMENT_METHODS[t.method],
@@ -33,8 +40,10 @@ export default {
     const sum = monthSummary(state, ui.month);
     const f = ui.filter || 'all';
     const q = normalize(ui.query || '');
-    const txs = sum.txs
-      .filter((t) => f === 'all' || t.type === f)
+    // a lista mostra também as transferências entre contas suas, que ficam fora dos totais
+    const txs = state.transactions
+      .filter((t) => monthKey(t.date) === ui.month)
+      .filter((t) => (f === 'all' ? true : !t.internal && t.type === f))
       .filter((t) => !q || normalize(`${t.description} ${getCategory(t.category).name} ${t.merchant} ${t.card}`).includes(q))
       .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
     const days = new Map();
@@ -58,7 +67,7 @@ export default {
       </div>
       ${txs.length
         ? [...days.entries()].map(([d, list]) => {
-            const total = list.reduce((s, t) => s + (t.type === 'income' ? t.amount : -t.amount), 0);
+            const total = list.reduce((s, t) => s + (t.internal ? 0 : t.type === 'income' ? t.amount : -t.amount), 0);
             return html`<section class="day"><div class="day-head"><span>${dayLabel(d, todayISO)}${d > todayISO ? ' · previsto' : ''}</span><span>${money(total, { sign: true })}</span></div><ul class="tx-list card flat">${list.map((t) => txRow(t))}</ul></section>`;
           })
         : emptyState(q ? 'Nada encontrado' : 'Sem lançamentos neste mês', q ? 'Tente outra palavra.' : 'Toque no + para registrar um gasto ou ganho.')}

@@ -150,6 +150,8 @@ export function addTransaction(draft) {
     source: draft.source || 'manual',
     // texto original da notificação: permite aprender quando você corrige receita/despesa
     ...(draft.raw ? { raw: String(draft.raw).slice(0, 400) } : {}),
+    // transferência entre contas suas: aparece no extrato, mas não conta como gasto nem ganho
+    ...(draft.internal ? { internal: true } : {}),
     ...(draft.loanId ? { loanId: draft.loanId } : {}),
     createdAt: Date.now(),
   };

@@ -24,7 +24,8 @@ export function addMonthsISO(iso, delta) {
   return toISO(new Date(y, m - 1 + delta, Math.min(d, last)));
 }
 
-export const txOfMonth = (state, key) => state.transactions.filter((t) => monthKey(t.date) === key);
+// transferências entre contas suas (internal) ficam fora das contas de gastos e ganhos
+export const txOfMonth = (state, key) => state.transactions.filter((t) => !t.internal && monthKey(t.date) === key);
 
 // Categorias de contas que vencem uma vez por mês: não entram no "ritmo diário" de gastos.
 const MONTHLY_BILLS = new Set(['moradia', 'contas', 'educacao', 'impostos', 'dividas', 'assinaturas']);
@@ -115,7 +116,7 @@ export function goalSaved(goal) {
 export function currentBalance(state, today = new Date()) {
   const iso = toISO(today);
   let b = 0;
-  for (const t of state.transactions) if (t.date <= iso) b += t.type === 'income' ? t.amount : -t.amount;
+  for (const t of state.transactions) if (t.date <= iso && !t.internal) b += t.type === 'income' ? t.amount : -t.amount;
   const saved = state.goals.reduce((s, g) => s + goalSaved(g), 0);
   return { available: round2(b - saved), saved: round2(saved), total: round2(b) };
 }
