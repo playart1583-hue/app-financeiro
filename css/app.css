@@ -607,3 +607,6 @@ p.pill { white-space: normal; display: inline; line-height: 1.6; }
 .btn-row.column > .btn { width: 100%; }
 .btn-row.even > .btn { flex: 1 1 140px; }
 .tile-badge { display: block; margin-top: 6px; }
+.card-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.card-list li { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.card-fields { display: grid; grid-template-columns: 76px 1fr 84px; gap: 8px; }

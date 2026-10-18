@@ -324,7 +324,7 @@ function openLoanForm() {
       <label class="field"><span>Tipo</span><select name="kind">${['emprestimo', 'consignado', 'financiamento', 'pix_parcelado', 'outro'].map((k) => html`<option value="${k}">${KINDS[k]}</option>`)}</select></label>
       <div class="row2"><label class="field"><span>Valor recebido</span><input name="principal" inputmode="decimal" placeholder="5.000,00"></label><label class="field"><span>Nº de parcelas</span><input name="n" type="number" min="1" max="480" value="12"></label></div>
       <div class="row2"><label class="field"><span>Valor da parcela</span><input name="pmt" inputmode="decimal" placeholder="se souber"></label><label class="field"><span>ou taxa % ao mês</span><input name="rate" inputmode="decimal" placeholder="ex.: 4,5"></label></div>
-      <div class="row2"><label class="field"><span>1ª parcela</span><input name="firstDue" type="date" value="${toISO(new Date())}"></label><label class="field"><span>Parcelas já pagas</span><input name="paid" type="number" min="0" value="0"></label></div>
+      <div class="row2"><label class="field"><span>Vencimento da 1ª parcela</span><input name="firstDue" type="date" value="${toISO(new Date())}"></label><label class="field"><span>Parcelas já pagas</span><input name="paid" type="number" min="0" value="0"></label></div>
       <p class="hint" id="lf-calc">Informe a parcela para eu calcular a taxa de juros, ou a taxa para calcular a parcela.</p>
     </div>
     <div data-mode="rotativo" hidden>

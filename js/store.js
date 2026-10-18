@@ -148,6 +148,9 @@ export function addTransaction(draft) {
     merchant: draft.merchant || '',
     location: draft.location || '',
     source: draft.source || 'manual',
+    ...(draft.last4 ? { last4: draft.last4 } : {}),
+    // parcelada com vencimento: cada parcela fica no mês em que vence; a data da compra fica guardada
+    ...(draft.firstDue && n > 1 ? { purchaseDate: draft.date } : {}),
     // transferência entre contas suas: aparece no extrato, mas não conta como gasto nem ganho
     ...(draft.internal ? { internal: true } : {}),
     ...(draft.loanId ? { loanId: draft.loanId } : {}),
@@ -161,7 +164,7 @@ export function addTransaction(draft) {
       for (let i = 0; i < n; i++) {
         const id = uid();
         ids.push(id);
-        s.transactions.push({ ...base, id, amount: pmt, date: addMonthsISO(draft.date, i), installment: { i: i + 1, n, groupId, cash } });
+        s.transactions.push({ ...base, id, amount: pmt, date: addMonthsISO(draft.firstDue || draft.date, i), installment: { i: i + 1, n, groupId, cash } });
       }
     } else if (draft.recurring) {
       const recurringId = uid();
@@ -199,6 +202,8 @@ export function addTransactions(drafts, { futureInstallments = true } = {}) {
         location: '',
         source: d.source || 'importacao',
         ...(d.fitid ? { fitid: d.fitid } : {}),
+        ...(d.last4 ? { last4: d.last4 } : {}),
+        ...(d.firstDue && d.installment?.n > 1 ? { purchaseDate: d.date } : {}),
         createdAt: Date.now(),
       };
       const amount = round2(d.amount);
@@ -209,7 +214,8 @@ export function addTransactions(drafts, { futureInstallments = true } = {}) {
         for (let k = i; k <= last; k++) {
           const id = uid();
           ids.push(id);
-          s.transactions.push({ ...base, id, amount, date: addMonthsISO(d.date, k - i), installment: { i: k, n, groupId, cash: round2(amount * n) } });
+          // com vencimento: a parcela desta fatura/compra fica no vencimento e as próximas nos meses seguintes
+          s.transactions.push({ ...base, id, amount, date: addMonthsISO(d.firstDue || d.date, k - i), installment: { i: k, n, groupId, cash: round2(amount * n) } });
         }
       } else {
         const id = uid();
@@ -414,13 +420,21 @@ export function payoffInstallments(groupId, amount, date = toISO(new Date())) {
 }
 
 /** Lançamento parecido já registrado (mesmo tipo, valor e data próxima): evita importar o mesmo lançamento duas vezes. */
+// mesma compra parcelada: mesmo cartão (quando os dois têm) e descrição parecida
+const sameCompra = (a, b) => {
+  if (a.last4 && b.last4 && a.last4 !== b.last4) return false;
+  const key = (x) => String(x.description || x.merchant || '').toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '').slice(0, 6);
+  return !key(a) || !key(b) || key(a) === key(b);
+};
+
 export function findDuplicate(draft) {
   const d = new Date((draft.date || toISO(new Date())) + 'T12:00:00');
   return state.transactions.find((t) => {
     if (draft.fitid && t.fitid) return draft.fitid === t.fitid;
     // parcela de fatura que já foi criada como "parcela futura" numa importação anterior
-    if (draft.installment && t.installment && t.installment.i === draft.installment.i && t.installment.n === draft.installment.n && Math.abs(t.amount - draft.amount) < 0.01) {
-      return Math.abs(new Date(t.date + 'T12:00:00') - d) / 86400000 <= 45;
+    if (draft.installment && t.installment && t.installment.i === draft.installment.i && t.installment.n === draft.installment.n && Math.abs(t.amount - draft.amount) < 0.01 && sameCompra(t, draft)) {
+      // até ~2,5 meses: a parcela pode ter sido guardada no vencimento, e a da fatura vem com a data da compra
+      return Math.abs(new Date(t.date + 'T12:00:00') - d) / 86400000 <= 75;
     }
     if (t.type !== draft.type || Math.abs(t.amount - draft.amount) > 0.009) return false;
     const diff = Math.abs(new Date(t.date + 'T12:00:00') - d) / 86400000;

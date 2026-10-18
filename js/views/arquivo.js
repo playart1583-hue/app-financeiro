@@ -6,6 +6,7 @@ import { analyzeStatementImages, canStructureText, structureText } from '../rece
 import { readDocx, readHtml, readOdt, readRtf } from '../documents.js';
 import { addTransactions, deleteTransactions, findDuplicate, mergeBackup, replaceState } from '../store.js';
 import { dateBR, esc, html, icon, money, openSheet, toast } from '../ui.js';
+import { cardInfo, cardText, knownLast4, nextDue, rememberCard } from '../cards.js';
 
 const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
@@ -404,6 +405,10 @@ function renderReview(r, sheet, mode) {
   const isInvoice = r.isInvoice || mode === 'fatura';
   const cats = (type, sel) => (type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map((c) => html`<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${c.icon} ${c.name}</option>`);
   const defaultCard = r.card ? cardLabel(r.card) : '';
+  // final do cartão: o da fatura/arquivo, ou o que todos os prints mostram
+  const rowFinals = [...new Set(r.movements.map((m) => m.last4).filter(Boolean))];
+  const defLast4 = r.card?.last4 || (rowFinals.length === 1 ? rowFinals[0] : '');
+  const defBank = (r.card && [r.card.bank, r.card.brand].filter(Boolean).join(' · ')) || cardInfo(defLast4)?.bank || '';
   const state = { movements: r.movements, table: r.table };
 
   const draw = () => {
@@ -430,10 +435,19 @@ function renderReview(r, sheet, mode) {
           </details>`
         : ''}
       <div class="row2">
-        <label class="field"><span>Cartão / conta</span><input name="o-card" value="${defaultCard}" placeholder="Ex.: Nubank · final 4321"></label>
-        <label class="field"><span>Forma de pagamento</span><select name="o-method">${Object.entries(PAYMENT_METHODS).map(([k, l]) => html`<option value="${k}" ${k === (isInvoice ? 'credito' : 'pix') ? 'selected' : ''}>${l}</option>`)}</select></label>
+        <label class="field"><span>Final do cartão</span><input name="o-last4" inputmode="numeric" maxlength="4" list="o-last4-list" autocomplete="off" value="${defLast4}" placeholder="Ex.: 8238"></label>
+        <label class="field"><span>Banco / conta</span><input name="o-bank" value="${defBank}" placeholder="Ex.: Nubank"></label>
       </div>
-      ${hasInst ? html`<label class="check"><input type="checkbox" name="o-future" checked> <span>Criar as parcelas futuras das compras parceladas (entram nas projeções)</span></label>` : ''}
+      <datalist id="o-last4-list">${knownLast4().map((c) => html`<option value="${c}">${cardInfo(c)?.bank || ''}</option>`)}</datalist>
+      <div class="row2">
+        <label class="field"><span>Forma de pagamento</span><select name="o-method">${Object.entries(PAYMENT_METHODS).map(([k, l]) => html`<option value="${k}" ${k === (isInvoice || hasInst ? 'credito' : 'pix') ? 'selected' : ''}>${l}</option>`)}</select></label>
+        ${hasInst
+          ? isInvoice
+            ? html`<label class="field"><span>Vencimento da fatura</span><input name="o-due" type="date" value="${r.dueDate || (cardInfo(defLast4)?.dueDay ? nextDue(ms.filter((m) => m.installment).map((m) => m.date).sort().pop(), cardInfo(defLast4).dueDay) : '')}"></label>`
+            : html`<label class="field"><span>Dia do vencimento</span><input name="o-dueday" type="number" min="1" max="31" inputmode="numeric" value="${cardInfo(defLast4)?.dueDay || ''}" placeholder="Ex.: 10"></label>`
+          : ''}
+      </div>
+      ${hasInst ? html`<label class="check"><input type="checkbox" name="o-future" checked> <span>Lançar as próximas parcelas nos meses seguintes${isInvoice ? ', no dia do vencimento' : ', no vencimento do cartão'} (entram nas projeções)</span></label>` : ''}
       <p class="hint" id="rv-sum"></p>
       <div class="rv-list">${shown.map(
         (m, i) => html`<div class="rv-row ${skip[i] ? 'off' : ''}">
@@ -442,6 +456,7 @@ function renderReview(r, sheet, mode) {
             <input name="d-${i}" value="${m.description}" aria-label="Descrição">
             <div class="rv-meta"><span>${dateBR(m.date)}</span>
               ${m.installment ? html`<span class="pill">parcela ${m.installment.i}/${m.installment.n}</span>` : ''}
+              ${m.last4 && m.last4 !== defLast4 ? html`<span class="pill">cartão ${m.last4}</span>` : ''}
               ${dup[i] ? html`<span class="pill warn">já registrado</span>` : ''}
               ${m.kind === 'pagamento' ? html`<span class="pill">pagamento da fatura</span>` : ''}
               ${m.kind === 'estorno' ? html`<span class="pill ok">estorno</span>` : ''}
@@ -478,11 +493,32 @@ function renderReview(r, sheet, mode) {
       if (e.target.name === 'use') e.target.closest('.rv-row').classList.toggle('off', !e.target.checked);
       updateSum();
     });
+    // final conhecido: completa banco e vencimento cadastrados
+    f.querySelector('[name=o-last4]').addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
+      const info = cardInfo(e.target.value);
+      if (!info) return;
+      if (info.bank && !f.elements['o-bank'].value) f.elements['o-bank'].value = info.bank;
+      if (info.dueDay && f.elements['o-dueday'] && !f.elements['o-dueday'].value) f.elements['o-dueday'].value = info.dueDay;
+      if (info.dueDay && f.elements['o-due'] && !f.elements['o-due'].value) f.elements['o-due'].value = nextDue(ms.filter((m) => m.installment).map((m) => m.date).sort().pop(), info.dueDay);
+    });
     updateSum();
     f.addEventListener('submit', (e) => {
       e.preventDefault();
-      const card = f.querySelector('[name=o-card]').value.trim();
+      const last4 = f.elements['o-last4'].value.trim();
+      const bank = f.elements['o-bank'].value.trim();
+      const card = cardText(last4, bank);
       const method = f.querySelector('[name=o-method]').value;
+      const invoiceDue = f.elements['o-due']?.value || '';
+      const dueDay = +f.elements['o-dueday']?.value || 0;
+      rememberCard(last4, { bank, due: invoiceDue, dueDay });
+      // vencimento de cada parcelada: o da fatura, ou o próximo vencimento do cartão depois da compra
+      const firstDueOf = (m) => {
+        if (!m.installment) return '';
+        if (invoiceDue) return invoiceDue;
+        const day = (m.last4 && m.last4 !== last4 ? cardInfo(m.last4)?.dueDay : null) || dueDay || cardInfo(last4)?.dueDay;
+        return day ? nextDue(m.date, day) : '';
+      };
       const picked = [...f.querySelectorAll('[name=use]:checked')].map((c) => +c.value);
       const rest = ms.map((_, k) => k).filter((k) => k >= MAX_ROWS && !skip[k]);
       const drafts = [...picked, ...rest].map((i) => {
@@ -497,7 +533,10 @@ function renderReview(r, sheet, mode) {
           date: m.date,
           time: m.time,
           method: m.method || method,
-          card: m.card || card,
+          // o cartão escrito acima vale para as linhas do mesmo final (ou sem final)
+          card: m.last4 && m.last4 !== last4 ? m.card : card || m.card,
+          last4: m.last4 || last4,
+          firstDue: firstDueOf(m),
           merchant: m.description,
           installment: m.installment,
           fitid: m.fitid,
