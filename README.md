@@ -30,6 +30,9 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 | Orçamento por categoria com alertas em 80% e 100% | Planejar → Orçamentos |
 | Sugestões automáticas: onde cortar, gastos pequenos, arredondamento para o cofrinho, reserva de emergência, dívida mais cara, plano de quitação | Início e Planejar → Dicas |
 | Ocultar valores, tema claro/escuro, backup (exportar/importar JSON) | Ajustes |
+| **Botão +** com todas as entradas: preencher à mão, ler print, documento ou fatura, colar texto, várias notificações, contrato de empréstimo | Barra inferior |
+| **Colar texto**: notificações, linhas de extrato, texto de fatura ou anotações ("almoço 32,90 débito", uma por linha) viram lançamentos para conferir | + → *Colar texto* |
+| **Bloqueio por digital** (app Android): pede digital, rosto ou senha do celular ao abrir e ao voltar depois de 30 s | Ajustes → *Bloqueio por digital* |
 
 ## App Android (APK)
 
@@ -83,7 +86,7 @@ Também é possível colar o texto de uma notificação ou comprovante.
 
 ## Importar de outros apps e da fatura
 
-Formatos aceitos: **CSV/TSV/TXT** (vírgula, ponto e vírgula, tab; UTF-8 ou Windows-1252), **OFX/QFX**, **XLSX/XLS/ODS** (via SheetJS), **JSON** (backup deste app — juntar ou substituir — ou lista de outro app), **PDF** (texto extraído com pdf.js) e **imagens**. Quando o formato não é reconhecido, o texto é organizado pelo Claude (no app da Claude ou com a chave da API).
+Formatos aceitos: **PDF** (inclusive escaneado: as páginas são lidas como prints), **DOCX/ODT/RTF/HTML** (texto e tabelas), **CSV/TSV/TXT** (vírgula, ponto e vírgula, tab; UTF-8 ou Windows-1252), **OFX/QFX**, **XLSX/XLS/ODS** (via SheetJS), **JSON** (backup deste app — juntar ou substituir — ou lista de outro app), **PDF** (texto extraído com pdf.js) e **imagens**. Quando o formato não é reconhecido, o texto é organizado pelo Claude (no app da Claude ou com a chave da API).
 
 Na fatura, o pagamento da fatura anterior vem desmarcado (para não contar o gasto duas vezes), estornos entram como reembolso e juros/IOF/anuidade como "Impostos e taxas". Compras parceladas importam a parcela do mês e, se você quiser, as próximas — numa fatura seguinte, as parcelas que já existem aparecem como repetidas.
 

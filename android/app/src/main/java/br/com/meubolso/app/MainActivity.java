@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NotificationReaderPlugin.class);
+        registerPlugin(AppLockPlugin.class);
         if (NotificationReaderPlugin.isShare(getIntent())) pendingShare = getIntent();
         super.onCreate(savedInstanceState);
     }

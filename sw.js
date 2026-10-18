@@ -1,10 +1,10 @@
 // Cache simples para o app abrir sem internet depois da primeira visita.
-const CACHE = 'meubolso-v3';
+const CACHE = 'meubolso-v4';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './icons/icon.svg', './css/app.css',
   './js/main.js', './js/store.js', './js/ui.js', './js/finance.js', './js/analytics.js', './js/insights.js',
   './js/parser.js', './js/categories.js', './js/receipt.js', './js/demo.js', './js/impact.js',
-  './js/views/reader.js', './js/views/emprestimo.js', './js/views/importar.js', './js/views/arquivo.js', './js/importers.js',
+  './js/views/reader.js', './js/views/emprestimo.js', './js/views/importar.js', './js/views/arquivo.js', './js/views/adicionar.js', './js/importers.js', './js/documents.js', './js/native.js', './js/lock.js',
   './js/views/home.js', './js/views/extrato.js', './js/views/relatorios.js', './js/views/planejar.js', './js/views/dicas.js',
   './js/views/cofrinhos.js', './js/views/dividas.js', './js/views/pix.js', './js/views/orcamentos.js', './js/views/ajustes.js', './js/views/form.js',
 ];

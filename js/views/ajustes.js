@@ -3,6 +3,7 @@ import { currentEngine } from '../receipt.js';
 import { cloud, exportJSON, getApiKey, importJSON, loadDemo, resetAll, setApiKey, updateSettings } from '../store.js';
 import { html, icon, pct, toast } from '../ui.js';
 import { isNativeApp, nativeFeatures, nativeReader, notificationAccess } from '../native.js';
+import { confirmIdentity, lockStatus } from '../lock.js';
 
 const SYNC = {
   local: 'Os dados ficam só neste aparelho. Faça backup de vez em quando.',
@@ -83,6 +84,12 @@ export default {
       </section>
 
       ${isNativeApp
+        ? html`<section class="card"><h2 class="card-title">${icon('shield')} Bloqueio por digital</h2>
+            <label class="check"><input type="checkbox" id="lock-on" ${st.lock ? 'checked' : ''}> <span>Pedir a digital (ou a senha do celular) para abrir o app</span></label>
+            <p class="hint" id="lock-hint">Bloqueia ao abrir e quando você volta depois de 30 segundos fora. Na tela de apps recentes, seus valores ficam escondidos.</p>
+          </section>`
+        : ''}
+      ${isNativeApp
         ? nativeSection(st)
         : html`<section class="card" id="auto"><h2 class="card-title">${icon('bell')} Mercado Pago, 99 e notificações</h2>
         <p class="hint">Mercado Pago e 99 não oferecem uma API para apps pessoais lerem seu extrato (a API do Mercado Pago é para quem vende e exige servidor próprio), e nenhum app de navegador consegue ler as notificações do celular sozinho. Estes são os caminhos que funcionam:</p>
@@ -151,6 +158,17 @@ export default {
         }),
       );
     }
+    root.querySelector('#lock-on')?.addEventListener('change', async (e) => {
+      const want = e.target.checked;
+      e.target.checked = !want; // só muda depois de confirmar
+      if (want) {
+        const { available } = await lockStatus();
+        if (!available) return toast('Cadastre uma digital ou uma senha de tela nas configurações do celular e tente de novo.');
+      }
+      if (!(await confirmIdentity(want ? 'Ativar o bloqueio por digital' : 'Desativar o bloqueio'))) return toast('Não foi possível confirmar sua identidade.');
+      updateSettings({ lock: want });
+      toast(want ? 'Bloqueio por digital ativado' : 'Bloqueio desativado');
+    });
     root.querySelector('#auto-reg').addEventListener('change', (e) => {
       updateSettings({ autoRegister: e.target.checked });
       toast(e.target.checked ? 'Registro automático ligado' : 'Vou pedir confirmação antes de registrar');

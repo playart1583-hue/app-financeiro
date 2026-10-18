@@ -5,6 +5,7 @@ import { analyzeInstallments } from '../finance.js';
 import { cardLabel, parseQuickEntry, parseReceiptText, toISO } from '../parser.js';
 import { analyzePurchase } from '../receipt.js';
 import { openReader } from './reader.js';
+import { openFileImport } from './arquivo.js';
 import { dateBR, html, icon, money, moneyInput, openSheet, pct, readMoney, toast } from '../ui.js';
 
 const INSTALLMENT_METHODS = ['credito', 'pix_parcelado', 'boleto'];
@@ -325,6 +326,13 @@ export function openPrintSheet({ file, text } = {}) {
     parseText: (t) => {
       const data = parseReceiptText(t);
       return data.amount ? { data, engine: { label: 'texto colado' } } : { error: 'Não achei o valor nesse texto. Confira se ele tem algo como "R$ 52,30".' };
+    },
+    footer: html`<button type="button" class="btn ghost" data-docs>${icon('upload')} É PDF, DOCX ou fatura? Importar arquivo</button>`,
+    onMount(sheet) {
+      sheet.body.querySelector('[data-docs]').addEventListener('click', () => {
+        sheet.close();
+        openFileImport({ mode: 'fatura' });
+      });
     },
     onResult({ data, engine }, sheet) {
       sheet.close();

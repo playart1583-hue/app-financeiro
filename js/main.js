@@ -2,10 +2,12 @@
 import { keyOf, addMonths } from './analytics.js';
 import { cloud, getState, init, subscribe } from './store.js';
 import { closeAllSheets, html, icon } from './ui.js';
-import { openPrintSheet, openTxForm } from './views/form.js';
+import { openPrintSheet } from './views/form.js';
+import { openAddMenu } from './views/adicionar.js';
 import { ingestExternalText, openNotificationsImport } from './views/importar.js';
 import { openFileImport } from './views/arquivo.js';
 import { isNativeApp, startNative } from './native.js';
+import { setupLock } from './lock.js';
 import inicio from './views/home.js';
 import extrato from './views/extrato.js';
 import relatorios from './views/relatorios.js';
@@ -90,7 +92,7 @@ document.addEventListener('click', (e) => {
     e.preventDefault();
     return go(g.dataset.go, { filter: g.dataset.filter });
   }
-  if (e.target.closest('[data-new]')) return openTxForm();
+  if (e.target.closest('[data-new]')) return openAddMenu();
   const m = e.target.closest('[data-month]');
   if (m) {
     ui.month = addMonths(ui.month, +m.dataset.month);
@@ -105,6 +107,7 @@ window.addEventListener('popstate', () => {
 });
 
 init();
+setupLock();
 ui.route = routeFromHash();
 subscribe(() => render());
 cloud.onStatus = () => ui.route === 'ajustes' && render();

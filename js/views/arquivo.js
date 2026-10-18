@@ -1,15 +1,16 @@
 // Importar arquivos de outros apps e bancos (CSV, TXT, OFX, Excel, JSON, PDF) e faturas de cartão (PDF, prints, CSV).
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, defaultClassification } from '../categories.js';
 import { detectSource, guessColumns, invoiceSum, parseCSV, parseJSONData, parseOFX, parseStatementText, tableToMovements, finishMovement } from '../importers.js';
-import { cardLabel, parseNotifications } from '../parser.js';
+import { cardLabel, parseNotifications, parseQuickEntry, toISO } from '../parser.js';
 import { analyzeStatementImages, canStructureText, structureText } from '../receipt.js';
+import { readDocx, readHtml, readOdt, readRtf } from '../documents.js';
 import { addTransactions, deleteTransactions, findDuplicate, mergeBackup, replaceState } from '../store.js';
 import { dateBR, esc, html, icon, money, openSheet, toast } from '../ui.js';
 
 const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
 const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-const ACCEPT = '.csv,.tsv,.txt,.ofx,.qfx,.xlsx,.xls,.ods,.json,.pdf,image/png,image/jpeg,image/webp';
+const ACCEPT = '.csv,.tsv,.txt,.ofx,.qfx,.xlsx,.xls,.ods,.json,.pdf,.docx,.odt,.rtf,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text,image/png,image/jpeg,image/webp';
 const MAX_ROWS = 400;
 
 const scripts = {};
@@ -72,6 +73,25 @@ async function readPdfText(file) {
   return out.join('\n');
 }
 
+/** Páginas de um PDF escaneado como imagens (até 8 páginas). */
+async function readPdfImages(file, maxPages = 8) {
+  const pdfjs = await loadScript(PDFJS_URL, 'pdfjsLib');
+  pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const out = [];
+  for (let p = 1; p <= Math.min(doc.numPages, maxPages); p++) {
+    const page = await doc.getPage(p);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.9));
+    out.push(new File([blob], `pagina-${p}.jpg`, { type: 'image/jpeg' }));
+  }
+  return out;
+}
+
 const ext = (f) => (f.name.split('.').pop() || '').toLowerCase();
 
 /** Lê os arquivos escolhidos e devolve um resultado para revisão. */
@@ -96,7 +116,21 @@ async function readFiles(files, mode, onStatus) {
   }
   if (e === 'pdf') {
     onStatus('Extraindo o texto do PDF…');
-    return textResult(await readPdfText(f), mode, 'PDF');
+    const text = await readPdfText(f);
+    // PDF escaneado (só imagem): sem texto, lê as páginas como prints
+    if (text.replace(/\s/g, '').length < 40) {
+      onStatus('O PDF é uma imagem escaneada. Lendo as páginas…');
+      const pages = await readPdfImages(f);
+      const r = await analyzeStatementImages(pages, { invoice: mode === 'fatura', onStatus });
+      return { label: `PDF escaneado · ${pages.length} página${pages.length > 1 ? 's' : ''} · ${r.engine?.label || ''}`, ...r };
+    }
+    return textResult(text, mode, 'PDF');
+  }
+  if (e === 'doc') throw new Error('Arquivos .doc antigos não dão para ler. No Word ou Google Docs, salve como DOCX ou PDF e envie de novo.');
+  if (['docx', 'odt', 'rtf', 'html', 'htm'].includes(e)) {
+    onStatus(`Lendo o documento ${f.name}…`);
+    const doc = e === 'docx' ? await readDocx(await f.arrayBuffer()) : e === 'odt' ? await readOdt(await f.arrayBuffer()) : e === 'rtf' ? readRtf(await readText(f)) : readHtml(await readText(f));
+    return documentResult(doc, mode, e.toUpperCase());
   }
   const text = await readText(f);
   const t = parseCSV(text);
@@ -107,6 +141,17 @@ async function readFiles(files, mode, onStatus) {
   return textResult(text, mode, e.toUpperCase() || 'Texto');
 }
 
+/** Documento com texto e tabelas: usa o que render mais lançamentos (a tabela maior ou o texto corrido). */
+function documentResult(doc, mode, kind) {
+  const fromText = textResult(doc.text, mode, kind);
+  const biggest = doc.tables.filter((t) => t.length >= 3).sort((a, b) => b.length - a.length)[0];
+  if (biggest) {
+    const fromTable = tableResult({ headers: biggest[0], rows: biggest.slice(1) }, mode, kind);
+    if (fromTable.movements.length > fromText.movements.length) return { ...fromTable, dueDate: fromText.dueDate, total: fromText.total, card: fromText.card, rawText: doc.text };
+  }
+  return fromText;
+}
+
 function tableResult(t, mode, kind) {
   const source = detectSource(t.headers);
   const map = guessColumns(t.headers, t.rows);
@@ -114,12 +159,37 @@ function tableResult(t, mode, kind) {
   return { label: `${kind} · ${source.label}`, table: { ...t, map, positiveIsExpense }, movements: tableToMovements(t.rows, map, { positiveIsExpense }), isInvoice: source.invoice || mode === 'fatura' };
 }
 
+/** Texto colado: planilha copiada, extrato, fatura, notificações ou anotações livres. */
+function parseAnyText(text, mode) {
+  const t = parseCSV(text);
+  if (t.headers.length >= 2 && t.rows.length) {
+    const r = tableResult(t, mode, 'Texto colado');
+    if (r.movements.length) return r;
+  }
+  return textResult(text, mode, 'Texto colado');
+}
+
 function textResult(text, mode, kind) {
   const st = parseStatementText(text, { invoice: mode === 'fatura' ? true : null });
   let movements = st.movements;
   if (!movements.length) {
     // texto de notificações (Mercado Pago, 99, bancos)
-    movements = parseNotifications(text).map((n) => finishMovement({ date: n.date || new Date().toISOString().slice(0, 10), time: n.time || '', description: n.description || n.merchant || 'Movimentação', signed: n.type === 'income' ? n.amount : -n.amount, type: n.type }));
+    const notes = parseNotifications(text).map((n) => finishMovement({ date: n.date || toISO(new Date()), time: n.time || '', description: n.description || n.merchant || 'Movimentação', signed: n.type === 'income' ? n.amount : -n.amount, type: n.type }));
+    // anotações livres, uma por linha: "almoço 32,90 débito", "+ freela 300", "tênis 3x 120 crédito"
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      // precisa de número e de palavra: "99" sozinho é nome de app, não gasto
+      .filter((l) => /\d/.test(l) && /[a-zà-ú]{2,}/i.test(l))
+      .map((l) => ({ line: l, q: parseQuickEntry(l) }))
+      .filter(({ q }) => q.amount > 0)
+      .map(({ line, q }) => {
+        const n = q.installments > 1 ? q.installments : 1;
+        const m = finishMovement({ date: q.date, description: q.description || line, signed: q.type === 'income' ? q.amount / n : -q.amount / n, type: q.type });
+        return { ...m, category: q.category, method: q.method, installment: n > 1 ? { i: 1, n } : null };
+      });
+    // notificações têm várias linhas por movimento; anotações, uma linha cada: fica a leitura que achar mais lançamentos
+    movements = lines.length > notes.length ? lines : notes.length ? notes : lines;
   }
   return { label: `${kind}${st.isInvoice ? ' · fatura' : ''}`, ...st, movements, rawText: text };
 }
@@ -136,7 +206,7 @@ export function openFileImport({ mode = 'extrato', files = null } = {}) {
       <input type="file" id="f-files" multiple accept="${ACCEPT}" class="sr-only">
       ${icon('upload', 'lg')}
       <b>Escolher arquivo</b>
-      <span id="f-hint">${mode === 'fatura' ? 'PDF da fatura, prints das páginas, CSV ou OFX do cartão.' : 'CSV, TXT, OFX, Excel, JSON ou PDF de extrato. Prints também funcionam.'}</span>
+      <span id="f-hint">${mode === 'fatura' ? 'PDF ou DOCX da fatura, prints das páginas, CSV ou OFX do cartão.' : 'CSV, TXT, OFX, Excel, JSON, PDF, DOCX ou HTML de extrato. Prints também funcionam.'}</span>
     </label>
     <div id="f-status" class="status" hidden></div>
     <details class="more"><summary>Onde exportar nos apps</summary>
@@ -206,22 +276,74 @@ export function openFileImport({ mode = 'extrato', files = null } = {}) {
       });
       sheet.body.querySelectorAll('[name=imp-mode]').forEach((r) =>
         r.addEventListener('change', () => {
-          $('#f-hint').textContent = modeNow() === 'fatura' ? 'PDF da fatura, prints das páginas, CSV ou OFX do cartão.' : 'CSV, TXT, OFX, Excel, JSON ou PDF de extrato. Prints também funcionam.';
+          $('#f-hint').textContent = modeNow() === 'fatura' ? 'PDF ou DOCX da fatura, prints das páginas, CSV ou OFX do cartão.' : 'CSV, TXT, OFX, Excel, JSON, PDF, DOCX ou HTML de extrato. Prints também funcionam.';
         }),
       );
       $('#f-read').addEventListener('click', () => {
         const text = $('#f-text').value.trim();
         if (!text) return status('Cole o texto primeiro.', 'error');
-        run(async () => {
-          const t = parseCSV(text);
-          if (t.headers.length >= 2 && t.rows.length) {
-            const r = tableResult(t, modeNow(), 'Texto');
-            if (r.movements.length) return r;
-          }
-          return textResult(text, modeNow(), 'Texto');
-        });
+        run(async () => parseAnyText(text, modeNow()));
       });
       if (files) handle(files);
+    },
+  });
+}
+
+/** Colar texto: interpreta qualquer texto e mostra os lançamentos para conferir antes de inserir. */
+export function openTextImport({ text = '' } = {}) {
+  openSheet({
+    title: 'Colar texto',
+    body: html`<div class="print">
+      <p class="hint">Cole notificações do banco, Mercado Pago ou 99, linhas do extrato, o texto da fatura, uma conversa ou anotações como <b>"almoço 32,90 débito"</b> (uma por linha). O app separa cada lançamento para você conferir.</p>
+      <label class="field"><span>Texto</span><textarea id="t-text" rows="8" placeholder="Você enviou um Pix de R$ 50,00 para Maria Souza&#10;03/10 IFOOD *RESTAURANTE 45,90&#10;uber 18 ontem&#10;+ freela 300">${text}</textarea></label>
+      <div class="btn-row">
+        <button type="button" class="btn" id="t-paste">${icon('copy')} Colar</button>
+        <button type="button" class="btn primary grow" id="t-read">Interpretar</button>
+      </div>
+      <label class="check"><input type="checkbox" id="t-invoice"> <span>É texto de fatura de cartão (gastos aparecem como valores positivos)</span></label>
+      <div id="f-status" class="status" hidden></div>
+      <div id="f-review"></div>
+    </div>`,
+    onMount(sheet) {
+      const $ = (q) => sheet.body.querySelector(q);
+      const status = (content, kind = '') => {
+        $('#f-status').hidden = !content;
+        $('#f-status').className = `status ${kind}`;
+        $('#f-status').innerHTML = String(content);
+      };
+      const read = async () => {
+        const value = $('#t-text').value.trim();
+        if (!value) return status('Cole o texto primeiro.', 'error');
+        const mode = $('#t-invoice').checked ? 'fatura' : 'extrato';
+        $('#f-review').innerHTML = '';
+        try {
+          let r = parseAnyText(value, mode);
+          if (!r.movements.length && (await canStructureText())) {
+            status(html`<span class="spinner" aria-hidden="true"></span><span>Pedindo ao Claude para organizar o texto…</span>`, 'busy');
+            r = { ...r, ...(await structureText(value, { invoice: mode === 'fatura' })), label: 'Texto colado · organizado pelo Claude' };
+          }
+          status('');
+          if (!r.movements.length) return status('Não encontrei valores nesse texto. Confira se há algo como "R$ 52,30" ou "almoço 32,90".', 'error');
+          renderReview(r, sheet, mode);
+        } catch (e) {
+          status(esc(e?.message || 'Não consegui interpretar esse texto.'), 'error');
+        }
+      };
+      $('#t-read').addEventListener('click', read);
+      $('#t-paste').addEventListener('click', async () => {
+        try {
+          const clip = await navigator.clipboard.readText();
+          if (clip) {
+            $('#t-text').value = clip;
+            return read();
+          }
+        } catch {
+          /* o sistema não deixou ler a área de transferência */
+        }
+        $('#t-text').focus();
+        toast('Toque e segure no campo de texto e escolha "Colar".');
+      });
+      if (text) read();
     },
   });
 }
@@ -262,7 +384,7 @@ function renderReview(r, sheet, mode) {
     box.innerHTML = String(html`<form id="rv" class="form">
       <div class="extracted"><p class="extracted-title">${icon('spark')} ${r.label}</p>
         ${isInvoice && (r.dueDate || r.total) ? html`<p class="hint">Fatura${defaultCard ? ` · ${defaultCard}` : ''}${r.dueDate ? ` · vence ${dateBR(r.dueDate)}` : ''}${r.total ? ` · total ${money(r.total, { force: true })}` : ''}</p>` : ''}
-        ${isInvoice && r.total ? html`<p class="pill ${Math.abs(sum - r.total) < 1 ? 'ok' : 'warn'}">${Math.abs(sum - r.total) < 1 ? 'A soma confere com o total da fatura' : `Soma dos itens ${money(sum, { force: true })}: diferença de ${money(Math.abs(r.total - sum), { force: true })} para o total (pode haver saldo anterior ou itens fora da lista)`}</p>` : ''}
+        ${isInvoice && r.total ? html`<p class="pill ${Math.abs(sum - r.total) < 0.05 ? 'ok' : 'warn'}">${Math.abs(sum - r.total) < 0.05 ? 'A soma confere com o total da fatura' : `Soma dos itens ${money(sum, { force: true })}: diferença de ${money(Math.abs(r.total - sum), { force: true })} para o total (pode haver saldo anterior ou itens fora da lista)`}</p>` : ''}
       </div>
       ${t
         ? html`<details class="more"><summary>Ajustar colunas</summary>
@@ -339,7 +461,7 @@ function renderReview(r, sheet, mode) {
           classification: m.type === 'expense' ? defaultClassification(category) : null,
           date: m.date,
           time: m.time,
-          method,
+          method: m.method || method,
           card: m.card || card,
           merchant: m.description,
           installment: m.installment,

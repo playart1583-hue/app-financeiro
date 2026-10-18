@@ -9,7 +9,7 @@ import { insightCard } from './dicas.js';
 import { openPrintSheet, openTxForm, quickPreview, quickSave } from './form.js';
 import { openLoanContract } from './emprestimo.js';
 import { openNotificationsImport } from './importar.js';
-import { openFileImport } from './arquivo.js';
+import { openFileImport, openTextImport } from './arquivo.js';
 
 export default {
   id: 'inicio',
@@ -45,6 +45,19 @@ export default {
       </div>
     </header>
 
+    ${!state.transactions.length && !state.loans.length
+      ? html`<section class="card start">
+          <h2 class="card-title">${icon('spark')} Comece por aqui</h2>
+          <p>Envie seus comprovantes, faturas e extratos: o app lê, separa gastos e ganhos e já calcula seu mês.</p>
+          <div class="start-actions">
+            <button type="button" class="tile" data-act="print"><span class="tile-ic">${icon('camera')}</span><span class="tile-main"><b>Ler print</b><small>Compra, Pix ou notificação</small></span></button>
+            <button type="button" class="tile" data-act="invoice"><span class="tile-ic">${icon('card')}</span><span class="tile-main"><b>Importar fatura</b><small>PDF, DOCX, print, CSV ou OFX</small></span></button>
+            <button type="button" class="tile" data-act="file"><span class="tile-ic">${icon('upload')}</span><span class="tile-main"><b>Importar extrato ou arquivo</b><small>Bancos, Mercado Pago, outros apps</small></span></button>
+            <button type="button" class="tile" data-act="text"><span class="tile-ic">${icon('copy')}</span><span class="tile-main"><b>Colar texto</b><small>Notificações, extrato ou anotações</small></span></button>
+            <button type="button" class="tile" data-act="new-income"><span class="tile-ic">${icon('plus')}</span><span class="tile-main"><b>Lançar seu salário</b><small>Marque "repetir todo mês" para entrar nas projeções</small></span></button>
+          </div>
+        </section>`
+      : ''}
     ${state.settings.demo ? html`<div class="banner"><p><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece do zero.</p><button type="button" class="btn sm" data-act="clear-demo">Apagar exemplos</button></div>` : ''}
 
     <nav class="quick" aria-label="Atalhos">
@@ -54,6 +67,7 @@ export default {
       <button type="button" data-act="notifications"><span class="q-ic">${icon('bell')}</span>Notificações</button>
       <button type="button" data-act="invoice"><span class="q-ic">${icon('card')}</span>Fatura</button>
       <button type="button" data-act="file"><span class="q-ic">${icon('upload')}</span>Arquivo</button>
+      <button type="button" data-act="text"><span class="q-ic">${icon('copy')}</span>Colar texto</button>
       <button type="button" data-go="pix"><span class="q-ic">${icon('pix')}</span>Pix parcelado</button>
       <button type="button" data-act="contract"><span class="q-ic">${icon('calc')}</span>Empréstimo</button>
       <button type="button" data-go="cofrinhos"><span class="q-ic">${icon('piggy')}</span>Cofrinho</button>
@@ -129,6 +143,7 @@ export default {
       if (act === 'contract') openLoanContract();
       if (act === 'invoice') openFileImport({ mode: 'fatura' });
       if (act === 'file') openFileImport();
+      if (act === 'text') openTextImport();
     });
   },
 };

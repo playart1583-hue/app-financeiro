@@ -65,14 +65,23 @@ export function replaceState(next) {
   listeners.forEach((fn) => fn(state));
 }
 
+/** Tira os dados de exemplo (marcados com demo) e mantém tudo o que a pessoa registrou. */
+function purgeDemo(s) {
+  const demo = buildDemo(new Date());
+  s.transactions = s.transactions.filter((t) => !t.demo);
+  s.goals = s.goals.filter((g) => !g.demo);
+  s.loans = s.loans.filter((l) => !l.demo);
+  for (const [k, v] of Object.entries(demo.budgets)) if (s.budgets[k] === v) delete s.budgets[k];
+  if (s.settings.name === demo.settings.name) s.settings.name = '';
+  s.settings.demo = false;
+}
+
 export function init() {
   const local = readLocal();
-  if (local) state = migrate(local);
-  else {
-    state = migrate(buildDemo(new Date()));
-    state.settings.demo = true;
-    writeLocal();
-  }
+  // o app começa vazio; quem ainda tinha os exemplos de versões antigas fica só com os próprios dados
+  state = migrate(local || empty());
+  if (state.settings.demo) purgeDemo(state);
+  writeLocal();
   cloud.connect();
   return state;
 }
@@ -232,13 +241,7 @@ export function restoreTransactions(list) {
 }
 
 export function clearDemo() {
-  commit((s) => {
-    s.transactions = s.transactions.filter((t) => !t.demo);
-    s.goals = s.goals.filter((g) => !g.demo);
-    s.loans = s.loans.filter((l) => !l.demo);
-    if (Object.values(s.budgets).length && s.settings.demo) s.budgets = {};
-    s.settings.demo = false;
-  });
+  commit(purgeDemo);
 }
 
 export function loadDemo() {
