@@ -445,6 +445,26 @@ export function findDuplicate(draft) {
   });
 }
 
+/**
+ * Vencimento de uma compra no crédito: com `firstDue`, cada parcela vai para o mês em que vence (a k-ésima,
+ * k-1 meses depois) e a data da compra fica em purchaseDate; sem ele, volta tudo para a data da compra.
+ */
+export function setDueDates(id, { purchaseDate, firstDue }) {
+  commit((s) => {
+    const t = s.transactions.find((x) => x.id === id);
+    if (!t) return;
+    const group = t.installment?.groupId ? s.transactions.filter((x) => x.installment?.groupId === t.installment.groupId) : [t];
+    for (const x of group) {
+      const k = (x.installment?.i || 1) - 1;
+      if (firstDue) Object.assign(x, { date: addMonthsISO(firstDue, k), purchaseDate });
+      else if (x.purchaseDate) {
+        x.date = addMonthsISO(purchaseDate, k);
+        delete x.purchaseDate;
+      }
+    }
+  });
+}
+
 /** Fechar acordo parcelado de uma dívida negativada: vira um parcelamento sem juros. */
 export function negotiateLoan(id, { n, pmt, firstDue }) {
   commit((s) => {

@@ -1,7 +1,8 @@
 // Formulário de lançamento (gasto/ganho), leitura de print e registro rápido por texto.
-import { addTransaction, deleteTransaction, findDuplicate, getState, restoreTransactions, updateTransaction } from '../store.js';
+import { addTransaction, deleteTransaction, findDuplicate, getState, restoreTransactions, setDueDates, updateTransaction } from '../store.js';
+import { addMonthsISO } from '../analytics.js';
 import { markOwnTransfer } from '../transfers.js';
-import { alignCreditToDue, cardInfo, cardText, cycleText, dueFor, findKnownLast4, knownLast4, rememberCard, splitCard, undoAlign } from '../cards.js';
+import { alignCreditToDue, cardInfo, cardText, cycleText, dueFor, findKnownLast4, knownLast4, rememberCard, saveCard, splitCard, undoAlign } from '../cards.js';
 import { CLASSIFICATIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, categorize, defaultClassification, getCategory } from '../categories.js';
 import { analyzeInstallments } from '../finance.js';
 import { cardLabel, parseQuickEntry, parseReceiptText, toISO } from '../parser.js';
@@ -71,6 +72,11 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
     ...(editing ? { ...editing, installments: 1 } : {}),
   };
   if (!v.category) v.category = v.type === 'income' ? 'salario' : 'outros';
+  // editando compra já no mês do vencimento: "Data" mostra a data da compra e o vencimento vem preenchido
+  if (editing?.purchaseDate) {
+    v.date = editing.purchaseDate;
+    v.firstDue = addMonthsISO(editing.date, -((editing.installment?.i || 1) - 1));
+  }
   // cartão em dois campos: final (8238) e banco/conta
   const split = splitCard(v.card);
   v.last4 = v.last4 || split.last4;
@@ -118,10 +124,10 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           <label class="field"><span>Parcelas</span><input id="f-inst" type="number" name="installments" min="1" max="72" inputmode="numeric" value="${v.installments || 1}"></label>
           <label class="field" id="f-pmt-wrap"><span>Valor da parcela</span><input id="f-pmt" name="installmentValue" inputmode="decimal" placeholder="sem juros" value="${moneyInput(v.installmentValue)}"></label>
         </div>
-        <label class="field" id="f-due-wrap"><span id="f-due-label">Vencimento da 1ª parcela</span><input id="f-due" type="date" name="firstDue" value="${v.firstDue || ''}"><small class="hint"><span id="f-cycle"></span><span id="f-due-hint">As próximas parcelas entram nos meses seguintes, no mesmo dia.</span></small></label>
         <div id="f-juros" class="juros" hidden></div>
         <label class="check" id="f-rec-wrap"><input type="checkbox" id="f-rec" name="recurring"> <span>Repetir todo mês (conta fixa, salário)</span></label>`
       : ''}
+    <label class="field" id="f-due-wrap" hidden><span id="f-due-label">Vencimento da 1ª parcela</span><input id="f-due" type="date" name="firstDue" value="${v.firstDue || ''}"><small class="hint"><span id="f-cycle"></span><span id="f-due-hint">As próximas parcelas entram nos meses seguintes, no mesmo dia.</span></small></label>
     <details class="more" ${extracted || v.merchant ? 'open' : ''}><summary>Mais detalhes</summary>
       <div class="row2">
         <label class="field"><span>Estabelecimento</span><input id="f-merchant" name="merchant" value="${v.merchant || ''}" autocomplete="off"></label>
@@ -165,6 +171,14 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           $('#f-pmt').placeholder = method === 'pix_parcelado' ? 'com juros' : 'sem juros';
           $('#f-rec-wrap').hidden = n > 1;
           renderJuros(n, method);
+        } else {
+          // editando: compra no crédito mostra o vencimento (da fatura, ou da 1ª parcela se for parcelada)
+          const withDue = type === 'expense' && method === 'credito';
+          const group = Boolean(editing?.installment);
+          $('#f-due-wrap').hidden = !withDue;
+          $('#f-due-label').textContent = group ? 'Vencimento da 1ª parcela' : 'Vencimento da fatura';
+          $('#f-due-hint').textContent = group ? 'Todas as parcelas mudam junto: cada uma no mês seguinte, no mesmo dia.' : 'A compra fica no mês em que a fatura vence.';
+          if (withDue) autoDue();
         }
         $('#f-submit').textContent = editing ? 'Salvar alterações' : type === 'income' ? 'Salvar ganho' : type === 'transfer' ? 'Salvar transferência' : 'Salvar gasto';
       };
@@ -312,7 +326,14 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           const { amount: _a, ...rest } = draft;
           const before = { ...editing }; // updateTransaction altera o próprio objeto
           updateTransaction(editId, { ...rest, amount }, { wholeGroup: f.querySelector('#f-group')?.checked });
+          // vencimento escrito (ou vindo do cartão): a compra e suas parcelas vão para os meses em que vencem
+          const due = type === 'expense' && method === 'credito' && !internal ? val('firstDue') || '' : '';
+          // data da compra: a que está no campo (parcela k sem vencimento ainda: volta k-1 meses até a compra)
+          const purchase = before.purchaseDate ? draft.date : addMonthsISO(draft.date, -((before.installment?.i || 1) - 1));
+          setDueDates(editId, { purchaseDate: purchase, firstDue: due });
+          if (due) rememberCard(draft.last4, { bank: val('bank')?.trim(), due });
           sheet.close();
+          if (due && due !== before.date && !before.purchaseDate) return toast(`Lançamento atualizado e levado para o vencimento (${dateBR(due)})`);
           if (draft.internal && !before.internal) {
             // lembra seu nome e marca a outra ponta (o Pix que saiu de um app e entrou no outro)
             const pair = markOwnTransfer({ ...before, ...draft, id: editId });
@@ -459,17 +480,46 @@ function announceSaved(results) {
     const d = ok[0].draft;
     const one = `${d.description} · ${money(d.amount, { force: true })}${d.installments > 1 ? ` em ${d.installments}x` : ''}${d.last4 ? ` · cartão ${d.last4}` : ''}${d.firstDue ? ` · vence ${dateBR(d.firstDue)}` : ''}`;
     const unknown = ok.find((r) => r.draft.last4 && r.draft.method === 'credito' && !r.known);
-    const tip = unknown ? ` Cadastre o cartão ${unknown.draft.last4} (fechamento e vencimento) em Ajustes para ir ao mês da fatura.` : '';
+    const tip = '';
     toast(`${ok.length === 1 ? `Registrado: ${one}` : `${ok.length} lançamentos registrados`}${left.length ? ` · ${left.length} não registrado${left.length > 1 ? 's' : ''}` : ''}.${tip}`, {
       action: 'Desfazer',
       onAction: () => ids.forEach((id) => deleteTransaction(id)),
       timeout: tip ? 12000 : 8000,
     });
   }
+  // cartão lido no print sem fechamento/vencimento: pergunta agora e já leva a compra para o mês da fatura
+  const unknownCard = ok.find((r) => r.draft.last4 && r.draft.method === 'credito' && !r.known);
+  if (unknownCard && !left.length) return openCardCycle(unknownCard.draft.last4, cardInfo(unknownCard.draft.last4)?.bank || unknownCard.draft.bank);
   // repetido ou sem valor: abre o primeiro para você decidir (os outros ficam no aviso)
   const first = left[0];
   if (first) openTxForm({ prefill: prefillFromExtract(first.data), extracted: first.data, engine: { label: first.reason === 'repetido' ? 'print (parece repetido)' : 'print' } });
   else if (!ok.length) toast('Não achei valores nesses prints.');
+}
+
+/** Pergunta o fechamento e o vencimento de um cartão novo e move as compras dele para o mês da fatura. */
+export function openCardCycle(last4, bank = '') {
+  openSheet({
+    title: `Cartão ${last4}`,
+    body: html`<form class="form" id="cyclef">
+      <p class="hint">Li no print uma compra no crédito com o cartão final <b>${last4}</b>. Em que dia a fatura dele fecha e em que dia vence? Assim a compra vai para o mês em que você paga, e as próximas desse cartão também.</p>
+      <label class="field"><span>Banco</span><input name="bank" value="${bank || ''}" placeholder="Ex.: Nubank"></label>
+      <div class="row2">
+        <label class="field"><span>Fatura fecha dia</span><input name="closeDay" type="number" min="1" max="31" inputmode="numeric" placeholder="Ex.: 28" required></label>
+        <label class="field"><span>Vence dia</span><input name="dueDay" type="number" min="1" max="31" inputmode="numeric" placeholder="Ex.: 5" required></label>
+      </div>
+      <div class="form-actions"><button type="button" class="btn ghost" data-close>Agora não</button><button type="submit" class="btn primary grow">Salvar cartão</button></div>
+    </form>`,
+    onMount(sheet) {
+      const f = sheet.body.querySelector('#cyclef');
+      f.addEventListener('submit', (e) => {
+        e.preventDefault();
+        saveCard(last4, { bank: f.bank.value, closeDay: f.closeDay.value, dueDay: f.dueDay.value });
+        sheet.close();
+        const moved = alignCreditToDue();
+        toast(moved.length ? `Cartão ${last4} salvo. ${moved.length} lançamento${moved.length > 1 ? 's foram' : ' foi'} para o mês do vencimento (${dateBR(moved[0].to)}).` : `Cartão ${last4} salvo`, moved.length ? { action: 'Desfazer', onAction: () => undoAlign(moved), timeout: 10000 } : {});
+      });
+    },
+  });
 }
 
 /** Compra lida de um print -> linha da lista de conferência (parcelada: o valor da 1ª parcela). */
