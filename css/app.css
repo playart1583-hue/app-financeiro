@@ -614,3 +614,6 @@ p.pill { white-space: normal; display: inline; line-height: 1.6; }
 body.has-sheet #toasts { top: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 12px); bottom: auto; }
 .card-cycle { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px 12px; margin: 0; display: grid; gap: 8px; }
 .card-cycle legend { font-weight: 800; padding: 0 6px; }
+.miss-row { display: grid; grid-template-columns: 1fr 84px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.miss-row small { display: block; color: var(--muted); font-size: 12px; }
+.miss-row b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

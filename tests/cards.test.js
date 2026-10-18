@@ -48,3 +48,11 @@ test('boleto: vencimento à parte da data do gasto', async () => {
   const r = parseReceiptText('Boleto\nBeneficiário: ESCOLA ABC\nVencimento: 10/11/2026\nValor: R$ 350,00\nLinha digitável 23790.12345', new Date(2026, 9, 18));
   assert.deepEqual([r.method, r.amount, r.dueDate, r.date], ['boleto', 350, '2026-11-10', null]);
 });
+
+test('final do cartão: número completo mascarado e formatos de apps diferentes', async () => {
+  const { findCard } = await import('../js/parser.js');
+  for (const t of ['Mastercard 5502 **** *ik* 8238', '5502 **** **** 8238', 'Visa 4111-xxxx-xxxx-8238', 'xxxx xxxx xxxx 8238', 'Cartão de crédito Mastercard 8238', 'Crédito •8238', '···· 8238', 'Pagamento com Elo 8238'])
+    assert.equal(findCard(t)?.last4, '8238', t);
+  for (const t of ['Pedido 1234 de 2026 valor 5678', 'Cartão de crédito em 14/10/2026', 'Pedido 702-0981190-6733060'])
+    assert.equal(findCard(t)?.last4 ?? null, null, t);
+});

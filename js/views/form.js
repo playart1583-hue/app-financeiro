@@ -491,7 +491,9 @@ function announceSaved(results) {
   // cartão lido no print sem fechamento/vencimento: pergunta agora e já leva a compra para o mês da fatura
   // (vários prints com cartões diferentes: pergunta de todos de uma vez)
   const unknownCards = [...new Map(ok.filter((r) => r.draft.last4 && r.draft.method === 'credito' && !r.known).map((r) => [r.draft.last4, cardInfo(r.draft.last4)?.bank || r.draft.bank || ''])).entries()];
-  if (unknownCards.length && !left.length) return openCardCycle(unknownCards);
+  // compras que podem ter sido no cartão mas o print não mostrou o final: pergunta qual foi
+  const missing = ok.filter((r) => r.draft.type === 'expense' && !r.draft.last4 && (r.draft.method === 'credito' || !r.data.method || r.draft.installments > 1));
+  if ((unknownCards.length || missing.length) && !left.length) return openCardCycle(unknownCards, missing);
   // repetido ou sem valor: abre o primeiro para você decidir (os outros ficam no aviso)
   const first = left[0];
   if (first) openTxForm({ prefill: prefillFromExtract(first.data), extracted: first.data, engine: { label: first.reason === 'repetido' ? 'print (parece repetido)' : 'print' } });
@@ -499,37 +501,70 @@ function announceSaved(results) {
 }
 
 /**
- * Pergunta o fechamento e o vencimento dos cartões lidos nos prints que ainda não têm isso cadastrado
- * (um bloco por cartão) e move as compras deles para o mês da fatura. `cards`: [[final, banco], ...]
+ * Depois de registrar prints: (1) fechamento e vencimento dos cartões lidos que ainda não têm isso cadastrado
+ * (um bloco por cartão) e (2) qual cartão foi usado nas compras em que o print não mostrou o final.
+ * Ao salvar, as compras vão para o mês da fatura. `cards`: [[final, banco], ...]; `missing`: compras salvas.
  */
-export function openCardCycle(cards) {
-  const many = cards.length > 1;
+export function openCardCycle(cards, missing = []) {
+  const finals = [...new Set([...knownLast4(), ...cards.map(([l]) => l)])];
+  const title = cards.length && !missing.length ? (cards.length > 1 ? 'Cartões dos prints' : `Cartão ${cards[0][0]}`) : 'Cartões das compras';
   openSheet({
-    title: many ? 'Cartões dos prints' : `Cartão ${cards[0][0]}`,
+    title,
     body: html`<form class="form" id="cyclef">
-      <p class="hint">${many ? html`Li compras no crédito com ${cards.length} cartões que ainda não têm fechamento e vencimento cadastrados.` : html`Li no print uma compra no crédito com o cartão final <b>${cards[0][0]}</b>.`} Em que dia a fatura fecha e em que dia vence? Assim cada compra vai para o mês em que você paga, e as próximas desse cartão também.</p>
-      ${cards.map(
-        ([last4, bank], i) => html`<fieldset class="card-cycle"><legend>Cartão ${last4}</legend>
-          <label class="field"><span>Banco</span><input name="bank-${i}" value="${bank}" placeholder="Ex.: Nubank"></label>
-          <div class="row2">
-            <label class="field"><span>Fatura fecha dia</span><input name="close-${i}" type="number" min="1" max="31" inputmode="numeric" placeholder="Ex.: 28"></label>
-            <label class="field"><span>Vence dia</span><input name="due-${i}" type="number" min="1" max="31" inputmode="numeric" placeholder="Ex.: 5"></label>
-          </div></fieldset>`,
-      )}
-      <div class="form-actions"><button type="button" class="btn ghost" data-close>Agora não</button><button type="submit" class="btn primary grow">Salvar ${many ? 'cartões' : 'cartão'}</button></div>
+      ${cards.length
+        ? html`<p class="hint">${cards.length > 1 ? html`Li compras no crédito com ${cards.length} cartões que ainda não têm fechamento e vencimento cadastrados.` : html`Li no print uma compra no crédito com o cartão final <b>${cards[0][0]}</b>.`} Em que dia a fatura fecha e em que dia vence? Assim cada compra vai para o mês em que você paga, e as próximas desse cartão também.</p>
+          ${cards.map(
+            ([last4, bank], i) => html`<fieldset class="card-cycle"><legend>Cartão ${last4}</legend>
+              <label class="field"><span>Banco</span><input name="bank-${i}" value="${bank}" placeholder="Ex.: Nubank"></label>
+              <div class="row2">
+                <label class="field"><span>Fatura fecha dia</span><input name="close-${i}" type="number" min="1" max="31" inputmode="numeric" placeholder="Ex.: 28"></label>
+                <label class="field"><span>Vence dia</span><input name="due-${i}" type="number" min="1" max="31" inputmode="numeric" placeholder="Ex.: 5"></label>
+              </div></fieldset>`,
+          )}`
+        : ''}
+      ${missing.length
+        ? html`<fieldset class="card-cycle"><legend>Compras sem o final do cartão no print</legend>
+            <p class="hint">Se foi no cartão, escreva o final (toque para escolher um dos seus). Deixe em branco se não foi no cartão.</p>
+            ${missing.map(
+              (r, i) => html`<div class="miss-row"><span><b>${r.draft.description}</b><small>${money(r.draft.amount, { force: true })}${r.draft.installments > 1 ? ` em ${r.draft.installments}x` : ''} · ${dateBR(r.draft.date)}</small></span>
+                <input name="miss-${i}" inputmode="numeric" maxlength="4" list="cycle-finals" autocomplete="off" placeholder="Final" aria-label="Final do cartão de ${r.draft.description}"></div>`,
+            )}
+            <datalist id="cycle-finals">${finals.map((l) => html`<option value="${l}">${cardInfo(l)?.bank || ''}</option>`)}</datalist>
+          </fieldset>`
+        : ''}
+      <div class="form-actions"><button type="button" class="btn ghost" data-close>Agora não</button><button type="submit" class="btn primary grow">Salvar</button></div>
     </form>`,
     onMount(sheet) {
       const f = sheet.body.querySelector('#cyclef');
+      f.addEventListener('input', (e) => {
+        if (e.target.name?.startsWith('miss-')) e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
+      });
       f.addEventListener('submit', (e) => {
         e.preventDefault();
-        // salva os que tiverem o dia de vencimento; os outros ficam para depois (Ajustes → Meus cartões)
+        // 1) ciclo dos cartões (os que tiverem o dia de vencimento; os outros ficam para depois)
         const saved = cards.filter(([last4], i) => f.elements[`due-${i}`].value && saveCard(last4, { bank: f.elements[`bank-${i}`].value, closeDay: f.elements[`close-${i}`].value, dueDay: f.elements[`due-${i}`].value }));
-        if (!saved.length) return toast('Informe pelo menos o dia de vencimento.');
+        // 2) cartão das compras sem final: vira compra no crédito daquele cartão (todas as parcelas)
+        const assigned = [];
+        missing.forEach((r, i) => {
+          const last4 = f.elements[`miss-${i}`].value;
+          if (!/^\d{4}$/.test(last4)) return;
+          const bank = cardInfo(last4)?.bank || cards.find(([l]) => l === last4)?.[1] || '';
+          updateTransaction(r.ids[0], { last4, card: cardText(last4, bank), method: 'credito' }, { wholeGroup: true });
+          assigned.push(last4);
+        });
+        if (!saved.length && !assigned.length) return toast('Preencha o vencimento de um cartão ou o final de uma compra.');
         sheet.close();
         const moved = alignCreditToDue();
         const nums = saved.map(([l]) => l);
-        const names = nums.length > 1 ? `Cartões ${nums.slice(0, -1).join(', ')} e ${nums.at(-1)} salvos` : `Cartão ${nums[0]} salvo`;
-        toast(moved.length ? `${names}. ${moved.length} lançamento${moved.length > 1 ? 's foram' : ' foi'} para o mês do vencimento.` : names, moved.length ? { action: 'Desfazer', onAction: () => undoAlign(moved), timeout: 10000 } : {});
+        const parts = [
+          nums.length ? (nums.length > 1 ? `Cartões ${nums.slice(0, -1).join(', ')} e ${nums.at(-1)} salvos` : `Cartão ${nums[0]} salvo`) : '',
+          assigned.length ? `${assigned.length} compra${assigned.length > 1 ? 's' : ''} ligada${assigned.length > 1 ? 's' : ''} ao cartão` : '',
+          moved.length ? `${moved.length} lançamento${moved.length > 1 ? 's foram' : ' foi'} para o mês do vencimento` : '',
+        ].filter(Boolean);
+        toast(`${parts.join('. ')}.`, moved.length ? { action: 'Desfazer', onAction: () => undoAlign(moved), timeout: 10000 } : {});
+        // final novo digitado: falta saber quando a fatura dele fecha e vence
+        const newOnes = [...new Set(assigned)].filter((l) => !cardInfo(l)?.dueDay).map((l) => [l, cardInfo(l)?.bank || '']);
+        if (newOnes.length) openCardCycle(newOnes);
       });
     },
   });

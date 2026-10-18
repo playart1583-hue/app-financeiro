@@ -132,10 +132,22 @@ const BRANDS = ['visa', 'mastercard', 'master', 'elo', 'hipercard', 'amex', 'ame
 export function findCard(text) {
   const t = normalize(text);
   // "final 8238", "terminado em 8238", "**** 8238", "•••• 8238", "Cartão 8238", "Cartão: 8238", "Visa 8238"
+  // número solto de 4 dígitos que não seja parte de valor, data, hora ou de um número maior
+  const N = '(?<![\\d.,/:])(\\d{4})(?![\\d.,/:])';
   const m =
-    t.match(/(?:final|terminad[oa] em|terminando em|termina em|com final|\*{2,}\s?|x{4}\s?|•{2,}\s?|\.{3,}\s?)\s*:?\s*(\d{4})\b/) ||
-    t.match(/\bcart[aã]o(?:\s+(?:de\s+)?(?:credito|debito|virtual|fisico|adicional))?\s*(?:n[ºo°.]*|:|-)?\s*(\d{4})(?![\d.,/:])/) ||
-    t.match(/\b(?:visa|mastercard|master|elo|hipercard|amex)\s*(?:\*+|•+|-|:)?\s*(\d{4})(?![\d.,/:])/);
+    // "final 8238", "terminado/terminando em 8238", "com final 8238"
+    t.match(new RegExp(`(?:final|terminad[oa] em|terminando em|termina em|com final)\\s*:?\\s*${N}`)) ||
+    // número completo com o meio escondido (ou embaralhado na leitura): "5502 **** **** 8238", "5502 **** *ik* 8238" -> o último grupo
+    // (o meio precisa ter cara de máscara: algum símbolo, ou "xxxx"; assim "1234 de 2026" não conta)
+    t.match(/(?<!\d)\d{4}[ -]+(?:(?:(?=\S*[^a-z0-9\s])\S{3,4}|x{4})[ -]+){1,2}(\d{4})(?![\d.,/:])/) ||
+    // número mascarado: "**** 8238", "•••• 8238", "···· 8238", "xxxx xxxx xxxx 8238", "...8238"
+    t.match(new RegExp(`(?:[*•·.x#]\\s?){2,}\\s*(\\d{4})(?![\\d.,/:])`)) ||
+    // "Cartão 8238", "Cartão: 8238", "Cartão de crédito Mastercard 8238", "cartão virtual - 8238"
+    t.match(new RegExp(`\\bcart[aã]o\\b[^\\d\\n]{0,30}?${N}`)) ||
+    // "Visa 8238", "Mastercard • 8238", "Elo - 8238"
+    t.match(new RegExp(`\\b(?:visa|mastercard|master|elo|hipercard|amex)\\b[^\\d\\n]{0,6}${N}`)) ||
+    // "Crédito •8238", "crédito à vista 8238"
+    t.match(new RegExp(`\\b(?:credito|debito)\\b[^\\d\\n]{0,12}${N}`));
   const brand = BRANDS.find((b) => new RegExp(`\\b${b}\\b`).test(t));
   const bank = BANKS.find((b) => new RegExp(`\\b${b}\\b`).test(t));
   if (!m && !brand && !bank) return null;
