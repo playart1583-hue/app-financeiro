@@ -10,9 +10,9 @@ const initial = (label) => (String(label || '?').trim()[0] || '?').toUpperCase()
 export const profileAvatar = (p, cls = '') => html`<span class="avatar c${p.color || 0} ${cls}" aria-hidden="true">${initial(p.label)}</span>`;
 
 /** Botão do perfil aberto, para trocar de perfil de qualquer tela. */
-export function profileChip(onBrand = false) {
+export function profileChip(onBrand = false, compact = false) {
   const p = activeProfile();
-  return html`<button type="button" class="profile-chip ${onBrand ? 'on-brand' : ''}" data-profiles aria-label="Perfil: ${p.label}. Trocar de perfil">${profileAvatar(p)}<span class="profile-name">${p.label}</span>${icon('chevR', 'chev')}</button>`;
+  return html`<button type="button" class="profile-chip ${onBrand ? 'on-brand' : ''} ${compact ? 'compact' : ''}" data-profiles aria-label="Perfil: ${p.label}. Trocar de perfil">${profileAvatar(p)}${compact ? '' : html`<span class="profile-name">${p.label}</span>`}${icon('chevR', 'chev')}</button>`;
 }
 
 export function openProfiles() {

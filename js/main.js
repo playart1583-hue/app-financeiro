@@ -9,6 +9,7 @@ import { openFileImport, openTextImport } from './views/arquivo.js';
 import { isNativeApp, startNative } from './native.js';
 import { setupLock } from './lock.js';
 import { openProfiles, profileChip } from './views/perfis.js';
+import { bellButton, openAlerts } from './views/avisos.js';
 import { askNotificationPermission, onReminderTap, remindersAvailable, rescheduleSoon, scheduleReminders } from './reminders.js';
 import inicio from './views/home.js';
 import extrato from './views/extrato.js';
@@ -76,7 +77,7 @@ function render({ keepFocus } = {}) {
   const gear =
     view.id === 'inicio'
       ? ''
-      : html`<div class="page-gear">${profileChip()}${view.id === 'ajustes' ? '' : html`<button type="button" class="icon-btn" data-go="ajustes" aria-label="Ajustes">${icon('gear')}</button>`}</div>`;
+      : html`<div class="page-gear">${bellButton()}${profileChip(false, true)}${view.id === 'ajustes' ? '' : html`<button type="button" class="icon-btn" data-go="ajustes" aria-label="Ajustes">${icon('gear')}</button>`}</div>`;
   // um contêiner novo a cada render: os listeners de bind() não se acumulam
   const page = document.createElement('div');
   page.className = 'page';
@@ -105,6 +106,7 @@ document.addEventListener('click', (e) => {
   }
   if (e.target.closest('[data-new]')) return openAddMenu();
   if (e.target.closest('[data-profiles]')) return openProfiles();
+  if (e.target.closest('[data-alerts]')) return openAlerts(go);
   const m = e.target.closest('[data-month]');
   if (m) {
     ui.month = addMonths(ui.month, +m.dataset.month);

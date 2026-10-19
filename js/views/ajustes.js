@@ -6,7 +6,7 @@ import { html, icon, pct, toast } from '../ui.js';
 import { isNativeApp, nativeBridge } from '../native.js';
 import { confirmIdentity, lockStatus } from '../lock.js';
 import { alignCreditToDue, cardList, cycleText, removeCard, saveCard, undoAlign } from '../cards.js';
-import { askNotificationPermission, notificationPermission, reminderPrefs, remindersAvailable, scheduleReminders, testNotification } from '../reminders.js';
+import { WEEKDAYS, askNotificationPermission, notificationPermission, reminderPrefs, remindersAvailable, scheduleReminders, testNotification } from '../reminders.js';
 
 const SYNC = {
   local: 'Os dados ficam só neste aparelho. Faça backup de vez em quando.',
@@ -89,6 +89,9 @@ export default {
               </div>
               <label class="field"><span>Lembrete para guardar nos cofrinhos (dia do mês)</span><input name="depositDay" type="number" min="0" max="31" inputmode="numeric" value="${reminderPrefs().depositDay || ''}" placeholder="Ex.: 5 (vazio = sem lembrete)"></label>
               <p class="hint">No dia do vencimento você também recebe um aviso. Lembrete de cofrinho: só para metas com prazo, com o valor que falta por mês.</p>
+              <label class="check"><input type="checkbox" name="adviceOn" ${reminderPrefs().adviceOn ? 'checked' : ''}> <span>Conselho da semana: o que pagar primeiro (dívida mais cara ou negativada) e onde cortar (gastos pequenos, orçamento estourado)</span></label>
+              <label class="field"><span>Dia do conselho</span><select name="adviceDay">${WEEKDAYS.map((d, i) => html`<option value="${i}" ${+reminderPrefs().adviceDay === i ? 'selected' : ''}>${d[0].toUpperCase() + d.slice(1)}</option>`)}</select></label>
+              <label class="check"><input type="checkbox" name="alertNow" ${reminderPrefs().alertNow ? 'checked' : ''}> <span>Avisar na hora quando aparecer um alerta (mês no vermelho, orçamento estourado, dívida cara)</span></label>
               <div class="btn-row"><button type="button" class="btn sm" id="rem-test">${icon('bell')} Enviar um teste</button><button type="button" class="btn sm" id="rem-allow" hidden>Permitir notificações</button></div>
             </form>
           </section>`
@@ -157,7 +160,7 @@ export default {
       showStatus();
       remf.addEventListener('change', () => {
         const day = Math.min(31, Math.max(0, +remf.depositDay.value || 0));
-        updateSettings({ reminders: { on: remf.on.checked, daysBefore: +remf.daysBefore.value, hour: remf.hour.value || '09:00', depositDay: day } });
+        updateSettings({ reminders: { on: remf.on.checked, daysBefore: +remf.daysBefore.value, hour: remf.hour.value || '09:00', depositDay: day, adviceOn: remf.adviceOn.checked, adviceDay: +remf.adviceDay.value, alertNow: remf.alertNow.checked } });
         toast(remf.on.checked ? 'Lembretes atualizados' : 'Lembretes desligados');
       });
       root.querySelector('#rem-allow').addEventListener('click', async () => {

@@ -6,12 +6,14 @@ import { isNativeApp } from './native.js';
 import { toISO } from './parser.js';
 import { getProfiles, getState, profileData } from './store.js';
 import { dateBR, money } from './ui.js';
+import { advice } from './views/avisos.js';
 
 const LN = () => (isNativeApp ? window.Capacitor?.Plugins?.LocalNotifications || null : null);
 export const remindersAvailable = () => Boolean(LN());
 
 /** Preferências (valem para todos os perfis): ligado, quantos dias antes, horário e dia do lembrete do cofrinho. */
-export const reminderPrefs = () => ({ on: true, daysBefore: 1, hour: '09:00', depositDay: 0, ...(getState().settings.reminders || {}) });
+export const reminderPrefs = () => ({ on: true, daysBefore: 1, hour: '09:00', depositDay: 0, adviceOn: true, adviceDay: 1, alertNow: true, ...(getState().settings.reminders || {}) });
+export const WEEKDAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 const addDays = (iso, n) => toISO(new Date(new Date(`${iso}T12:00:00`).getTime() + n * 86400000));
 const atHour = (iso, hhmm) => new Date(`${iso}T${hhmm || '09:00'}:00`).getTime();
@@ -98,8 +100,74 @@ export function buildNotifications(now = new Date()) {
       }
     }
   }
+  // conselho da semana: o que pagar primeiro e onde cortar, no dia escolhido (próximas 2 semanas)
+  if (prefs.adviceOn) {
+    for (const p of profiles) {
+      const tips = advice(profileData(p.id), now);
+      const pay = tips.find((t) => t.group === 'pagar');
+      const cut = tips.find((t) => t.group === 'cortar');
+      if (!pay && !cut) continue;
+      for (const at of nextWeekdays(now, +prefs.adviceDay, prefs.hour, 2)) {
+        list.push({
+          id: idOf(`${p.id}|conselho|${toISO(new Date(at))}`),
+          title: `${profiles.length > 1 ? `${p.label} · ` : ''}Conselho da semana`,
+          body: pay ? `Pague primeiro: ${pay.title}` : `Onde cortar: ${cut.title}`,
+          largeBody: [pay && `Pague primeiro: ${pay.title}. ${pay.text}`, cut && `Onde cortar: ${cut.title}. ${cut.text}`].filter(Boolean).join('\n\n'),
+          schedule: { at: new Date(at), allowWhileIdle: true },
+          channelId: 'vencimentos',
+          smallIcon: 'ic_stat_notify',
+          extra: { profile: p.id, route: 'dicas' },
+        });
+      }
+    }
+  }
   // o Android guarda até 500; os mais próximos bastam (o app reagenda sempre que abre ou muda algo)
   return list.sort((a, b) => a.schedule.at - b.schedule.at).slice(0, 64);
+}
+
+/** Próximas `n` datas do dia da semana `wd` no horário `hhmm` (em milissegundos). */
+function nextWeekdays(now, wd, hhmm, n) {
+  const out = [];
+  for (let k = 0; out.length < n && k < 21; k++) {
+    const d = toISO(new Date(now.getTime() + k * 86400000));
+    const at = atHour(d, hhmm);
+    if (new Date(`${d}T12:00:00`).getDay() === wd && at > now.getTime()) out.push(at);
+  }
+  return out;
+}
+
+// alertas importantes já avisados (por perfil), para não repetir
+const LS_SENT = 'meubolso:avisados';
+const FRESH = 2000000000;
+const sentSet = () => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(LS_SENT) || '[]'));
+  } catch {
+    return new Set();
+  }
+};
+
+/** Alertas novos (mês no vermelho, orçamento estourado, dívida cara...) viram notificação em 1 minuto, uma vez. */
+function freshAlerts(now = new Date()) {
+  if (!reminderPrefs().alertNow) return [];
+  const sent = sentSet();
+  const profiles = getProfiles();
+  const out = [];
+  for (const p of profiles) {
+    for (const a of advice(profileData(p.id), now).filter((x) => x.level === 'alerta')) {
+      const key = `${p.id}|${a.id}|${now.toISOString().slice(0, 7)}`;
+      if (sent.has(key)) continue;
+      sent.add(key);
+      // faixa de ids própria: o reagendamento não cancela um alerta que ainda vai sair
+      out.push({ id: FRESH + (idOf(`agora|${key}`) % 100000000), title: `${profiles.length > 1 ? `${p.label} · ` : ''}${a.title}`, body: a.text, largeBody: a.text, schedule: { at: new Date(now.getTime() + 60000 + out.length * 1000), allowWhileIdle: true }, channelId: 'vencimentos', smallIcon: 'ic_stat_notify', extra: { profile: p.id, route: a.action?.route || 'dicas' } });
+    }
+  }
+  try {
+    localStorage.setItem(LS_SENT, JSON.stringify([...sent].slice(-300)));
+  } catch {
+    /* ignore */
+  }
+  return out.slice(0, 5);
 }
 
 let channelReady = false;
@@ -139,10 +207,11 @@ export async function scheduleReminders() {
   if (!ln) return 0;
   try {
     const pending = await ln.getPending();
-    if (pending.notifications?.length) await ln.cancel({ notifications: pending.notifications.map((n) => ({ id: n.id })) });
+    const old = (pending.notifications || []).filter((n) => n.id < FRESH);
+    if (old.length) await ln.cancel({ notifications: old.map((n) => ({ id: n.id })) });
     if (!reminderPrefs().on || (await notificationPermission()) !== 'granted') return 0;
     await ensureChannel(ln);
-    const list = buildNotifications();
+    const list = [...buildNotifications(), ...freshAlerts()];
     if (list.length) await ln.schedule({ notifications: list });
     return list.length;
   } catch (e) {

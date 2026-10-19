@@ -8,6 +8,7 @@ import { dayLabel, emptyState, hbars, html, icon, money, monthName, progress, to
 const MONTHS_SHORT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 import { txRow } from './extrato.js';
 import { profileChip } from './perfis.js';
+import { bellButton } from './avisos.js';
 import { upcomingPayments } from '../reminders.js';
 import { insightCard } from './dicas.js';
 import { openPrintSheet, openTxForm, quickPreview, quickSave } from './form.js';
@@ -38,7 +39,8 @@ export default {
       <div class="hero-top">
         <div><p class="hello">${hello}${name ? `, ${name}` : ''}</p><p class="hero-month">${monthName(key)}</p></div>
         <div class="hero-actions">
-          ${profileChip(true)}
+          ${bellButton(true)}
+          ${profileChip(true, true)}
           <button type="button" class="icon-btn on-brand" data-act="toggle-hide" aria-label="${hide ? 'Mostrar valores' : 'Ocultar valores'}">${icon(hide ? 'eyeOff' : 'eye')}</button>
           <button type="button" class="icon-btn on-brand" data-go="ajustes" aria-label="Ajustes">${icon('gear')}</button>
         </div>

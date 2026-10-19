@@ -601,7 +601,7 @@ p.pill { white-space: normal; display: inline; line-height: 1.6; }
 /* ---------- Alinhamento ---------- */
 .page > * { flex-shrink: 0; } /* blocos da tela nunca encolhem (botões empilhados ficavam achatados) */
 .page-gear { position: absolute; top: 10px; right: var(--gr); z-index: 2; display: flex; align-items: center; gap: 2px; }
-.page > .page-gear + .page-head h1 { padding-right: 180px; } /* título não passa por baixo da engrenagem */
+.page > .page-gear + .page-head h1 { padding-right: 140px; } /* título não passa por baixo da engrenagem */
 .type-seg span { white-space: nowrap; gap: 4px; padding: 0 4px; font-size: 12.5px; }
 .btn-row.column { flex-direction: column; flex-wrap: nowrap; }
 .btn-row.column > .btn { width: 100%; }
@@ -643,3 +643,20 @@ body.has-sheet #toasts { top: calc(var(--safe-area-inset-top, env(safe-area-inse
 .due-date small { font-size: 11px; color: var(--muted); text-transform: uppercase; }
 .due-date.today { background: var(--warn-bg); color: var(--warn); }
 .due-val { font: 800 14px var(--font-num); white-space: nowrap; }
+
+/* ---------- Avisos (sininho) ---------- */
+.bell { position: relative; }
+.icon-btn.on-brand { color: inherit; }
+.bell .badge { position: absolute; top: 3px; right: 2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--expense); color: #ffffff; font: 800 11px/18px var(--font-num); text-align: center; box-shadow: 0 0 0 2px var(--bg); }
+.hero .bell .badge { box-shadow: 0 0 0 2px var(--hero); }
+.profile-chip.compact { padding: 0 4px; gap: 2px; }
+.alert-list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 8px; }
+.alert button { width: 100%; display: flex; gap: 12px; align-items: center; text-align: left; padding: 12px; border: 0; border-radius: var(--radius-sm); background: var(--surface-2); color: inherit; }
+.alert.new button { box-shadow: inset 3px 0 0 var(--brand); }
+.alert .alert-ic { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--info-bg); color: var(--info); }
+.alert.alerta .alert-ic { background: var(--bad-bg); color: var(--expense); }
+.alert.atencao .alert-ic { background: var(--warn-bg); color: var(--warn); }
+.alert small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.alert .tx-main { flex: 1; min-width: 0; }
+.alert .tx-main b, .alert .tx-main small { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.alerts .section-title { margin: 6px 0 8px; }
