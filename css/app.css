@@ -660,3 +660,5 @@ body.has-sheet #toasts { top: calc(var(--safe-area-inset-top, env(safe-area-inse
 .alert .tx-main { flex: 1; min-width: 0; }
 .alert .tx-main b, .alert .tx-main small { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 .alerts .section-title { margin: 6px 0 8px; }
+.due-list .tx-main { flex: 1; min-width: 0; }
+.due-list .tx-main b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
