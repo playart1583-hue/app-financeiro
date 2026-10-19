@@ -31,7 +31,7 @@ export function upcomingPayments(state, today = new Date(), days = 45) {
   for (const t of state.transactions) {
     if (t.type !== 'expense' || t.internal || t.date < from || t.date > to) continue;
     const last4 = t.last4 || lastOf(t.card);
-    if (t.method === 'credito' && last4) {
+    if ((t.method === 'credito' || t.method === 'pix_parcelado') && last4) {
       const key = `${last4}|${t.date}`;
       const inv = invoices.get(key) || { kind: 'fatura', date: t.date, amount: 0, count: 0, last4, title: `Fatura do cartão ${last4}${state.settings.cards?.[last4]?.bank ? ` (${state.settings.cards[last4].bank})` : ''}` };
       inv.amount += t.amount;

@@ -125,7 +125,7 @@ export function parseQuickEntry(input, today = new Date()) {
   };
 }
 
-const BANKS = ['99pay', '99 pay', 'nubank', 'itau', 'bradesco', 'santander', 'banco do brasil', 'caixa', 'inter', 'c6', 'picpay', 'mercado pago', 'neon', 'next', 'original', 'btg', 'xp', 'sicoob', 'sicredi', 'pagbank', 'pagseguro', 'will bank', 'porto', 'ourocard'];
+const BANKS = ['99pay', '99 pay', 'nubank', 'itau', 'bradesco', 'santander', 'banco do brasil', 'caixa', 'inter', 'c6', 'picpay', 'mercado pago', 'neon', 'next', 'banco original', 'btg', 'xp', 'sicoob', 'sicredi', 'pagbank', 'pagseguro', 'will bank', 'porto', 'ourocard'];
 const BRANDS = ['visa', 'mastercard', 'master', 'elo', 'hipercard', 'amex', 'american express'];
 
 /** Encontra informações do cartão: "final 1234", "**** 1234", bandeira, banco. */
@@ -215,6 +215,8 @@ export function parseReceiptText(text, today = new Date()) {
       break;
     }
   }
+  // "Para MATHEUS FREIRE DE SOUZA" (comprovante sem dois-pontos): nome em maiúsculas logo depois de "Para"
+  if (!merchant) merchant = lines.map((l) => l.match(/^[Pp]ara\s+([A-ZÀ-Ü][A-ZÀ-Ü.' ]{3,60})$/)?.[1]).find((n) => n && n.trim().split(/\s+/).length >= 2) || null;
   let counterpartLabel = null;
   if (!merchant) {
     merchant = notificationCounterpart(original);
@@ -239,7 +241,10 @@ export function parseReceiptText(text, today = new Date()) {
 
   const cityMatch = original.match(/(?:cidade|local)\s*[:\-]\s*([^\n]+)/i);
   // carteiras digitais (Mercado Pago, 99Pay, PicPay) sem forma explícita: saiu do saldo, tratamos como Pix
-  const method = methodFrom(t) || (inst && inst.n > 1 ? 'credito' : null) || (/mercado pago|99pay|99 pay|picpay|\b99\b/.test(t) ? 'pix' : null);
+  // Pix/transferência em parcelas ("Transferência concluída ... Parcelamento 4 x R$ 75,34"): Pix parcelado, mesmo
+  // que o print também fale de Pix em outro lugar (anúncio de chave Pix etc.)
+  const pixInParts = inst && inst.n > 1 && /\b(pix|transferencia)\b/.test(t) && /parcelament|parcelad|transferencia (concluida|realizada|enviada|efetuada)|pix (enviado|realizado|efetuado)/.test(t);
+  const method = (pixInParts ? 'pix_parcelado' : methodFrom(t)) || (inst && inst.n > 1 ? 'credito' : null) || (/mercado pago|99pay|99 pay|picpay|\b99\b/.test(t) ? 'pix' : null);
   const card = findCard(original);
   // vencimento (boleto, conta, fatura): fica à parte; a data do gasto é outra que apareça, ou hoje
   const dueLine = lines.find((l) => /\b(vencimento|vence em|vence dia|pagar ate|pague ate|data limite)\b/.test(normalize(l)));
@@ -251,7 +256,14 @@ export function parseReceiptText(text, today = new Date()) {
   const app = findApp(t);
   if (!merchant && app === '99' && /corrida|viagem/.test(t)) merchant = 'Corrida 99';
   const desc = merchant || lines[0] || '';
-  const category = categorize(desc, income ? 'income' : 'expense') || categorize(original.replace(/sem juros/gi, ''), income ? 'income' : 'expense');
+  let category = categorize(desc, income ? 'income' : 'expense') || categorize(original.replace(/sem juros/gi, ''), income ? 'income' : 'expense');
+  // Pix parcelado: "Pix parcelado para Fulano"; sem outra pista, é um crédito que você paga em parcelas
+  if (method === 'pix_parcelado' && !income) {
+    const who = merchant ? merchant.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()).replace(/ (De|Da|Do|Dos|Das|E) /g, (w) => w.toLowerCase()) : '';
+    counterpartLabel = who ? `Pix parcelado para ${who}` : `Pix parcelado${app ? ` ${app === '99' ? '99Pay' : app}` : ''}`;
+    // categoria só pelo destinatário (o resto do print costuma ser anúncio: "Use seu CPF ou telefone"...)
+    category = (merchant && categorize(merchant, 'expense')) || 'dividas';
+  }
 
   let cashPrice = null;
   const cash = original.match(/(?:a vista|à vista|valor original|valor do produto|preco a vista)\D{0,15}(\d{1,3}(?:\.\d{3})*,\d{2}|\d+[.,]\d{2})/i);

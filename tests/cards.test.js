@@ -56,3 +56,12 @@ test('final do cartão: número completo mascarado e formatos de apps diferentes
   for (const t of ['Pedido 1234 de 2026 valor 5678', 'Cartão de crédito em 14/10/2026', 'Pedido 702-0981190-6733060'])
     assert.equal(findCard(t)?.last4 ?? null, null, t);
 });
+
+test('print do 99Pay: transferência com "Parcelamento 4 x" é Pix parcelado (o anúncio de chave Pix não engana)', async () => {
+  const { parseReceiptText } = await import('../js/parser.js');
+  const text = 'Transferência concluída com sucesso\nR$252,00\nPara MATHEUS FREIRE DE SOUZA\nValor original R$252,00\nDesconto nas taxas R$1,01\nParcelamento 4 x R$75,34\nData 19/10/26 17:58:09\nVer meu comprovante\nQuer mais benefícios?\nVincule sua chave Pix e ganhe até\nR$5,00\nUse seu CPF ou telefone\nVincular chave Pix\nConcluído';
+  const r = parseReceiptText(text, new Date(2026, 9, 19));
+  assert.deepEqual([r.method, r.amount, r.installments, r.installmentValue, r.date, r.description, r.category, r.card?.bank ?? null], ['pix_parcelado', 252, 4, 75.34, '2026-10-19', 'Pix parcelado para Matheus Freire de Souza', 'dividas', null]);
+  // compra no cartão em parcelas continua sendo crédito
+  assert.equal(parseReceiptText('Compra aprovada\nTotal R$ 300,00\n3x de R$ 100,00\nVisa final 8238', new Date(2026, 9, 19)).method, 'credito');
+});

@@ -241,6 +241,8 @@ export function addTransaction(draft) {
     // parcelada com vencimento: cada parcela fica no mês em que vence; a data da compra fica guardada
     // no crédito com vencimento: o lançamento fica no mês em que a fatura vence; a data da compra fica guardada
     ...(draft.firstDue && draft.firstDue !== draft.date ? { purchaseDate: draft.date } : {}),
+    // vencimento estimado (Pix parcelado sem o cartão): o cartão, quando você disser qual é, acerta o mês
+    ...(draft.dueGuess && draft.firstDue ? { dueGuess: true } : {}),
     // transferência entre contas suas: aparece no extrato, mas não conta como gasto nem ganho
     ...(draft.internal ? { internal: true } : {}),
     ...(draft.loanId ? { loanId: draft.loanId } : {}),
@@ -523,6 +525,7 @@ export function setDueDates(id, { purchaseDate, firstDue }) {
     const group = t.installment?.groupId ? s.transactions.filter((x) => x.installment?.groupId === t.installment.groupId) : [t];
     for (const x of group) {
       const k = (x.installment?.i || 1) - 1;
+      delete x.dueGuess;
       if (firstDue) Object.assign(x, { date: addMonthsISO(firstDue, k), purchaseDate });
       else if (x.purchaseDate) {
         x.date = addMonthsISO(purchaseDate, k);

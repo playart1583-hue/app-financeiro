@@ -104,32 +104,34 @@ export function removeCard(last4) {
 export const cardList = () => Object.entries(cards()).map(([last4, c]) => ({ last4, ...c }));
 
 /**
- * Compras no crédito já lançadas na data da compra (antes desta regra, ou antes de cadastrar o cartão):
- * passam para o mês em que a fatura vence, pelo fechamento e vencimento do cartão. Parcelas: a k-ésima
- * vence k-1 meses depois da primeira. Retorna o que mudou, para poder desfazer.
+ * Compras no crédito (e Pix parcelado, que vem na fatura) já lançadas na data da compra, ou com o vencimento
+ * só estimado: passam para o mês em que a fatura vence, pelo fechamento e vencimento do cartão. Parcelas: a
+ * k-ésima vence k-1 meses depois da primeira. Retorna o que mudou, para poder desfazer.
  */
 export function alignCreditToDue() {
   const moved = [];
   const groups = new Map();
   for (const t of getState().transactions) {
-    if (t.type !== 'expense' || t.method !== 'credito' || t.purchaseDate || t.internal) continue;
+    if (t.type !== 'expense' || !['credito', 'pix_parcelado'].includes(t.method) || (t.purchaseDate && !t.dueGuess) || t.internal) continue;
     const info = cardInfo(t.last4 || splitCard(t.card).last4);
     if (!info?.dueDay) continue;
     if (t.installment?.groupId) (groups.get(t.installment.groupId) || groups.set(t.installment.groupId, []).get(t.installment.groupId)).push([t, info]);
     else {
-      const due = dueFor(t.date, info);
-      if (due && due !== t.date) moved.push({ id: t.id, from: t.date, to: due });
+      const purchase = t.dueGuess ? t.purchaseDate : t.date;
+      const due = dueFor(purchase, info);
+      if (due && (due !== t.date || t.dueGuess)) moved.push({ id: t.id, from: t.date, to: due, purchase, guess: t.dueGuess });
     }
   }
   for (const list of groups.values()) {
     list.sort((a, b) => a[0].installment.i - b[0].installment.i);
     const [first, info] = list[0];
     // a parcela de menor número ficou na data da compra (à mão: a 1ª; fatura: a parcela daquele mês)
-    const due1 = dueFor(first.date, info);
+    const purchase = first.dueGuess ? first.purchaseDate : first.date;
+    const due1 = dueFor(purchase, info);
     if (!due1) continue;
     for (const [t] of list) {
       const to = addMonthsISO(due1, t.installment.i - 1);
-      if (to !== t.date) moved.push({ id: t.id, from: t.date, to, purchase: first.date });
+      if (to !== t.date || t.dueGuess) moved.push({ id: t.id, from: t.date, to, purchase, guess: t.dueGuess });
     }
   }
   if (!moved.length) return [];
@@ -137,10 +139,13 @@ export function alignCreditToDue() {
   commit((s) => {
     for (const t of s.transactions) {
       const m = byId.get(t.id);
-      if (m) Object.assign(t, { date: m.to, purchaseDate: m.purchase || m.from });
+      if (m) {
+        Object.assign(t, { date: m.to, purchaseDate: m.purchase });
+        delete t.dueGuess;
+      }
     }
   });
-  return moved;
+  return moved.filter((m) => m.to !== m.from);
 }
 
 /** Desfaz o alinhamento acima. */
@@ -149,10 +154,10 @@ export function undoAlign(moved) {
   commit((s) => {
     for (const t of s.transactions) {
       const m = byId.get(t.id);
-      if (m) {
-        t.date = m.from;
-        delete t.purchaseDate;
-      }
+      if (!m) continue;
+      t.date = m.from;
+      if (m.guess) Object.assign(t, { purchaseDate: m.purchase, dueGuess: true });
+      else delete t.purchaseDate;
     }
   });
 }

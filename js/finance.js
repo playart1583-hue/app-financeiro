@@ -233,19 +233,6 @@ export function monthlyToReach(target, saved, i, months) {
 }
 
 /**
- * Taxas de referência aproximadas (% ao mês) para comparar ofertas.
- * São ordens de grandeza do mercado brasileiro, não dados ao vivo: confira as médias atuais no site do Banco Central.
- */
-export const REFERENCE_RATES = {
-  consignado: 0.019,
-  financiamento: 0.02,
-  emprestimo: 0.06,
-  pix_parcelado: 0.06,
-  cartao: 0.14,
-  cheque: 0.08,
-};
-
-/**
  * Custo real de uma oferta de empréstimo.
  * released = quanto cai na conta; financed = valor total financiado (inclui IOF, tarifas, seguro).
  * A taxa efetiva compara o que você recebe com o que vai pagar: é o custo de verdade (próximo do CET).

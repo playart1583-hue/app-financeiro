@@ -364,11 +364,13 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
 export function prefillFromExtract(x) {
   const type = x.type || 'expense';
   const category = x.category || categorize(`${x.merchant || ''} ${x.description || ''}`, type) || (type === 'income' ? 'outros-ganhos' : 'outros');
-  const method = x.method || (x.installments > 1 ? 'credito' : x.card ? 'credito' : 'pix');
+  let method = x.method || (x.installments > 1 ? 'credito' : x.card ? 'credito' : 'pix');
+  // Pix ou transferência em parcelas é Pix parcelado
+  if (x.installments > 1 && (method === 'pix' || method === 'transferencia')) method = 'pix_parcelado';
   return {
     type,
     amount: x.amount || '',
-    description: x.description ? (/^(Pix|Transferência) (para|de) /.test(x.description) ? x.description : tidy(x.description)) : '',
+    description: x.description ? (/^(Pix parcelado|Pix|Transferência)( (para|de) | |$)/.test(x.description) ? x.description : tidy(x.description)) : '',
     category,
     classification: x.classification || (type === 'expense' ? defaultClassification(category) : null),
     date: x.date || toISO(new Date()),
@@ -456,12 +458,17 @@ export function saveFromPrint(data) {
   if (!(amount > 0)) return { saved: false, reason: 'sem valor', data };
   const info = cardInfo(p.last4);
   const n = p.type === 'expense' && INSTALLMENT_METHODS.includes(p.method) ? Math.max(1, Math.min(72, p.installments || 1)) : 1;
+  const due = p.type !== 'expense' ? '' : p.firstDue || (n > 1 || p.method === 'credito' ? dueFor(p.date, info) : '');
+  // Pix parcelado sem o cartão: a 1ª parcela costuma vir na fatura seguinte, não no mês do Pix. Fica um mês
+  // depois até você dizer o cartão (aí vai para o vencimento certo da fatura)
+  const guess = !due && p.type === 'expense' && p.method === 'pix_parcelado' && n > 1 ? addMonthsISO(p.date, 1) : '';
   const draft = {
     ...p,
     amount,
     description: p.description || p.merchant || getCategory(p.category).name,
     card: p.last4 ? cardText(p.last4, info?.bank || p.bank) : p.card,
-    firstDue: p.type !== 'expense' ? '' : p.firstDue || (n > 1 || p.method === 'credito' ? dueFor(p.date, info) : ''),
+    firstDue: due || guess,
+    dueGuess: Boolean(guess),
     installments: n,
     installmentValue: n > 1 && p.installmentValue > 0 ? +p.installmentValue : null,
     source: 'print',
@@ -469,7 +476,7 @@ export function saveFromPrint(data) {
   if (findDuplicate({ type: draft.type, amount: n > 1 ? draft.installmentValue || amount / n : amount, date: draft.date, time: draft.time, installment: n > 1 ? { i: 1, n } : null, last4: draft.last4, description: draft.description }))
     return { saved: false, reason: 'repetido', data, draft };
   rememberCard(draft.last4, { bank: info?.bank ? '' : p.bank });
-  return { saved: true, ids: addTransaction(draft), draft, known: Boolean(info?.dueDay) };
+  return { saved: true, ids: addTransaction(draft), draft, data, known: Boolean(info?.dueDay) };
 }
 
 /** Aviso do que foi registrado, com Desfazer; o que não deu para salvar abre para você completar. */
@@ -490,7 +497,7 @@ function announceSaved(results) {
   }
   // cartão lido no print sem fechamento/vencimento: pergunta agora e já leva a compra para o mês da fatura
   // (vários prints com cartões diferentes: pergunta de todos de uma vez)
-  const unknownCards = [...new Map(ok.filter((r) => r.draft.last4 && r.draft.method === 'credito' && !r.known).map((r) => [r.draft.last4, cardInfo(r.draft.last4)?.bank || r.draft.bank || ''])).entries()];
+  const unknownCards = [...new Map(ok.filter((r) => r.draft.last4 && ['credito', 'pix_parcelado'].includes(r.draft.method) && !r.known).map((r) => [r.draft.last4, cardInfo(r.draft.last4)?.bank || r.draft.bank || ''])).entries()];
   // compras que podem ter sido no cartão mas o print não mostrou o final: pergunta qual foi
   const missing = ok.filter((r) => r.draft.type === 'expense' && !r.draft.last4 && (r.draft.method === 'credito' || !r.data.method || r.draft.installments > 1));
   if ((unknownCards.length || missing.length) && !left.length) return openCardCycle(unknownCards, missing);
@@ -524,7 +531,7 @@ export function openCardCycle(cards, missing = []) {
         : ''}
       ${missing.length
         ? html`<fieldset class="card-cycle"><legend>Compras sem o final do cartão no print</legend>
-            <p class="hint">Se foi no cartão, escreva o final (toque para escolher um dos seus). Deixe em branco se não foi no cartão.</p>
+            <p class="hint">Se foi no cartão, escreva o final (toque para escolher um dos seus). Deixe em branco se não foi no cartão.${missing.some((r) => r.draft.method === 'pix_parcelado') ? ' No Pix parcelado, é o cartão em que as parcelas são cobradas: elas vão para os vencimentos da fatura dele.' : ''}</p>
             ${missing.map(
               (r, i) => html`<div class="miss-row"><span><b>${r.draft.description}</b><small>${money(r.draft.amount, { force: true })}${r.draft.installments > 1 ? ` em ${r.draft.installments}x` : ''} · ${dateBR(r.draft.date)}</small></span>
                 <input name="miss-${i}" inputmode="numeric" maxlength="4" list="cycle-finals" autocomplete="off" placeholder="Final" aria-label="Final do cartão de ${r.draft.description}"></div>`,
@@ -549,7 +556,7 @@ export function openCardCycle(cards, missing = []) {
           const last4 = f.elements[`miss-${i}`].value;
           if (!/^\d{4}$/.test(last4)) return;
           const bank = cardInfo(last4)?.bank || cards.find(([l]) => l === last4)?.[1] || '';
-          updateTransaction(r.ids[0], { last4, card: cardText(last4, bank), method: 'credito' }, { wholeGroup: true });
+          updateTransaction(r.ids[0], { last4, card: cardText(last4, bank), method: r.draft.method === 'pix_parcelado' ? 'pix_parcelado' : 'credito' }, { wholeGroup: true });
           assigned.push(last4);
         });
         if (!saved.length && !assigned.length) return toast('Preencha o vencimento de um cartão ou o final de uma compra.');
