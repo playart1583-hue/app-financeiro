@@ -633,3 +633,13 @@ body.has-sheet #toasts { top: calc(var(--safe-area-inset-top, env(safe-area-inse
 .profile-pick { flex: 1; display: flex; align-items: center; gap: 12px; border: 0; background: none; color: inherit; text-align: left; padding: 4px 0; min-width: 0; }
 .profile-pick small { display: block; color: var(--muted); font-size: 12px; }
 .icon-btn.danger { color: var(--expense); }
+
+/* ---------- Próximos pagamentos ---------- */
+.due-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.due-list li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.due-list li:last-child { border-bottom: 0; }
+.due-date { width: 44px; height: 44px; border-radius: 12px; background: var(--surface-2); display: grid; place-items: center; align-content: center; line-height: 1; flex: none; }
+.due-date b { font: 800 17px var(--font-num); }
+.due-date small { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+.due-date.today { background: var(--warn-bg); color: var(--warn); }
+.due-val { font: 800 14px var(--font-num); white-space: nowrap; }

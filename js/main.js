@@ -1,6 +1,6 @@
 // Inicialização, navegação entre telas e barra inferior.
 import { keyOf, addMonths } from './analytics.js';
-import { cloud, getState, init, subscribe } from './store.js';
+import { activeProfile, cloud, getState, init, subscribe, switchProfile, updateSettings } from './store.js';
 import { closeAllSheets, closeTopSheet, html, icon, toast } from './ui.js';
 import { alignCreditToDue, undoAlign } from './cards.js';
 import { openPrintSheet } from './views/form.js';
@@ -9,6 +9,7 @@ import { openFileImport, openTextImport } from './views/arquivo.js';
 import { isNativeApp, startNative } from './native.js';
 import { setupLock } from './lock.js';
 import { openProfiles, profileChip } from './views/perfis.js';
+import { askNotificationPermission, onReminderTap, remindersAvailable, rescheduleSoon, scheduleReminders } from './reminders.js';
 import inicio from './views/home.js';
 import extrato from './views/extrato.js';
 import relatorios from './views/relatorios.js';
@@ -126,6 +127,24 @@ cloud.onStatus = () => ui.route === 'ajustes' && render();
 render();
 // compras no crédito que ficaram na data da compra vão para o mês em que a fatura vence
 announceAligned(alignCreditToDue());
+
+// Lembretes de vencimentos (app Android): pede a permissão uma vez, agenda e reagenda quando algo muda
+if (remindersAvailable()) {
+  (async () => {
+    if (!getState().settings.remindersAsked) {
+      updateSettings({ remindersAsked: true });
+      await askNotificationPermission();
+    }
+    scheduleReminders();
+  })();
+  subscribe(() => rescheduleSoon());
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && rescheduleSoon());
+  // tocar no aviso abre o perfil e a tela do vencimento
+  onReminderTap(({ profile, route }) => {
+    if (profile && profile !== activeProfile().id) switchProfile(profile);
+    if (route) go(route);
+  });
+}
 
 export function announceAligned(moved) {
   if (!moved.length) return;

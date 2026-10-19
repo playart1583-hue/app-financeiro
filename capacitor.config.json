@@ -8,6 +8,10 @@
   "plugins": {
     "SystemBars": {
       "style": "DARK"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_notify",
+      "iconColor": "#0A8550"
     }
   }
 }

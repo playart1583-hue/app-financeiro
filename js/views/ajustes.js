@@ -6,6 +6,7 @@ import { html, icon, pct, toast } from '../ui.js';
 import { isNativeApp, nativeBridge } from '../native.js';
 import { confirmIdentity, lockStatus } from '../lock.js';
 import { alignCreditToDue, cardList, cycleText, removeCard, saveCard, undoAlign } from '../cards.js';
+import { askNotificationPermission, notificationPermission, reminderPrefs, remindersAvailable, scheduleReminders, testNotification } from '../reminders.js';
 
 const SYNC = {
   local: 'Os dados ficam só neste aparelho. Faça backup de vez em quando.',
@@ -76,6 +77,22 @@ export default {
         </form>
       </section>
 
+      ${remindersAvailable()
+        ? html`<section class="card" id="lembretes"><h2 class="card-title">${icon('bell')} Lembretes de pagamento</h2>
+            <p class="hint">O celular avisa antes de cada vencimento: faturas dos cartões, boletos, contas com data, parcelas de empréstimos e o depósito nos cofrinhos. Vale para todos os perfis, mesmo com o app fechado.</p>
+            <p class="status" id="rem-status">Verificando…</p>
+            <form class="form" id="remf">
+              <label class="check"><input type="checkbox" name="on" ${reminderPrefs().on ? 'checked' : ''}> <span>Avisar dos vencimentos</span></label>
+              <div class="row2">
+                <label class="field"><span>Avisar com</span><select name="daysBefore">${[0, 1, 2, 3, 5, 7].map((d) => html`<option value="${d}" ${+reminderPrefs().daysBefore === d ? 'selected' : ''}>${d === 0 ? 'só no dia' : d === 1 ? '1 dia antes' : `${d} dias antes`}</option>`)}</select></label>
+                <label class="field"><span>Horário</span><input name="hour" type="time" value="${reminderPrefs().hour}"></label>
+              </div>
+              <label class="field"><span>Lembrete para guardar nos cofrinhos (dia do mês)</span><input name="depositDay" type="number" min="0" max="31" inputmode="numeric" value="${reminderPrefs().depositDay || ''}" placeholder="Ex.: 5 (vazio = sem lembrete)"></label>
+              <p class="hint">No dia do vencimento você também recebe um aviso. Lembrete de cofrinho: só para metas com prazo, com o valor que falta por mês.</p>
+              <div class="btn-row"><button type="button" class="btn sm" id="rem-test">${icon('bell')} Enviar um teste</button><button type="button" class="btn sm" id="rem-allow" hidden>Permitir notificações</button></div>
+            </form>
+          </section>`
+        : ''}
       ${isNativeApp
         ? html`<section class="card"><h2 class="card-title">${icon('shield')} Bloqueio por digital</h2>
             <label class="check"><input type="checkbox" id="lock-on" ${st.lock ? 'checked' : ''}> <span>Pedir a digital (ou a senha do celular) para abrir o app</span></label>
@@ -126,6 +143,34 @@ export default {
       updateSettings({ lock: want });
       toast(want ? 'Bloqueio por digital ativado' : 'Bloqueio desativado');
     });
+    // lembretes
+    const remf = root.querySelector('#remf');
+    if (remf) {
+      const status = root.querySelector('#rem-status');
+      const showStatus = async () => {
+        const perm = await notificationPermission();
+        const n = perm === 'granted' && reminderPrefs().on ? await scheduleReminders() : 0;
+        status.className = `status ${perm === 'granted' ? 'info' : 'error'}`;
+        status.textContent = perm === 'granted' ? (reminderPrefs().on ? `Ativos: ${n} aviso${n === 1 ? '' : 's'} agendado${n === 1 ? '' : 's'} para os próximos 60 dias.` : 'Lembretes desligados.') : 'As notificações do Meu Bolso estão bloqueadas no celular.';
+        root.querySelector('#rem-allow').hidden = perm === 'granted';
+      };
+      showStatus();
+      remf.addEventListener('change', () => {
+        const day = Math.min(31, Math.max(0, +remf.depositDay.value || 0));
+        updateSettings({ reminders: { on: remf.on.checked, daysBefore: +remf.daysBefore.value, hour: remf.hour.value || '09:00', depositDay: day } });
+        toast(remf.on.checked ? 'Lembretes atualizados' : 'Lembretes desligados');
+      });
+      root.querySelector('#rem-allow').addEventListener('click', async () => {
+        const r = await askNotificationPermission();
+        if (r !== 'granted') toast('Libere em Configurações do celular → Apps → Meu Bolso → Notificações.');
+        showStatus();
+      });
+      root.querySelector('#rem-test').addEventListener('click', async () => {
+        if ((await notificationPermission()) !== 'granted' && (await askNotificationPermission()) !== 'granted') return toast('Permita as notificações primeiro.');
+        await testNotification();
+        toast('Aviso de teste em 5 segundos');
+      });
+    }
     const cardf = root.querySelector('#cardf');
     cardf.last4.addEventListener('input', (e) => (e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4)));
     cardf.addEventListener('submit', (e) => {

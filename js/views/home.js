@@ -3,9 +3,12 @@ import { getCategory } from '../categories.js';
 import { buildInsights } from '../insights.js';
 import { toISO } from '../parser.js';
 import { clearDemo, deleteTransactions, restoreTransactions, updateSettings } from '../store.js';
-import { emptyState, hbars, html, icon, money, monthName, progress, toast } from '../ui.js';
+import { dayLabel, emptyState, hbars, html, icon, money, monthName, progress, toast } from '../ui.js';
+
+const MONTHS_SHORT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 import { txRow } from './extrato.js';
 import { profileChip } from './perfis.js';
+import { upcomingPayments } from '../reminders.js';
 import { insightCard } from './dicas.js';
 import { openPrintSheet, openTxForm, quickPreview, quickSave } from './form.js';
 import { openLoanContract } from './emprestimo.js';
@@ -19,6 +22,8 @@ export default {
     const bal = currentBalance(state, today);
     const sum = monthSummary(state, key);
     const fromNotifications = state.transactions.filter((t) => t.source === 'notificacao');
+    const todayISO = toISO(today);
+    const upcoming = upcomingPayments(state, today, 15);
     const proj = projectMonth(state, today);
     const insights = buildInsights(state, today).slice(0, 3);
     const recent = state.transactions.filter((t) => t.date <= toISO(today)).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)).slice(0, 5);
@@ -85,6 +90,15 @@ export default {
         <div class="qe-preview" id="quick-preview" aria-live="polite"></div>
       </form>
     </section>
+
+    ${upcoming.length
+      ? html`<section class="card"><div class="card-head"><h2 class="card-title">${icon('bell')} Próximos pagamentos</h2><button type="button" class="link" data-go="extrato">Extrato ${icon('chevR')}</button></div>
+          <ul class="due-list">${upcoming.slice(0, 5).map(
+            (it) => html`<li><span class="due-date ${it.date === todayISO ? 'today' : ''}"><b>${it.date.slice(8)}</b><small>${MONTHS_SHORT[+it.date.slice(5, 7) - 1]}</small></span><span class="tx-main"><b>${it.title}</b><small>${it.date === todayISO ? 'vence hoje' : dayLabel(it.date, todayISO).toLowerCase()}${it.count > 1 ? ` · ${it.count} compras` : ''}</small></span><b class="due-val">${money(it.amount)}</b></li>`,
+          )}</ul>
+          ${upcoming.length > 5 ? html`<p class="hint">E mais ${upcoming.length - 5} nos próximos 15 dias · total ${money(upcoming.reduce((s, x) => s + x.amount, 0))}</p>` : ''}
+        </section>`
+      : ''}
 
     <section class="card">
       <div class="card-head"><h2 class="card-title">Projeção do mês</h2><button type="button" class="link" data-go="relatorios">Relatório ${icon('chevR')}</button></div>
