@@ -26,6 +26,7 @@ export default {
         ${tile('pix', 'pix', 'Simulador de Pix parcelado', 'Descubra quanto de juros tem no parcelamento')}
         ${tile('orcamentos', 'target', 'Orçamentos por categoria', budgets ? `${budgets} limite${budgets > 1 ? 's' : ''} definido${budgets > 1 ? 's' : ''}${over ? ` · ${over} estourado${over > 1 ? 's' : ''}` : ''}` : 'Defina quanto quer gastar em cada categoria')}
         ${tile('dicas', 'bulb', 'Dicas para economizar', tips ? `${tips} sugest${tips > 1 ? 'ões' : 'ão'} agora` : 'Tudo em ordem por aqui')}
+        <button type="button" class="tile" data-profiles><span class="tile-ic">${icon('home')}</span><span class="tile-main"><b>Perfis</b><small>Contas de outras pessoas (namorada, pai...) separadas das suas</small></span>${icon('chevR', 'muted')}</button>
         ${tile('ajustes', 'card', 'Meus cartões', Object.keys(state.settings.cards || {}).length ? `${Object.keys(state.settings.cards).length} cadastrado${Object.keys(state.settings.cards).length > 1 ? 's' : ''} · final e vencimento` : 'Cadastre o final e o vencimento de cada cartão')}
         ${tile('ajustes', 'gear', 'Ajustes e backup', 'Nome, tema, leitura de prints, exportar dados')}
       </div>`;

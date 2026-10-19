@@ -8,6 +8,31 @@ import { buildDemo } from './demo.js';
 
 const LS_KEY = 'meubolso:v1';
 const LS_SECRET = 'meubolso:apikey';
+// Perfis: cada pessoa (você, namorada, pai...) tem os próprios lançamentos, cartões, dívidas e cofrinhos.
+// O perfil principal continua na chave antiga; os outros em meubolso:v1:perfil:<id>.
+const LS_PROFILES = 'meubolso:perfis';
+export const MAIN_PROFILE = 'eu';
+const profileKey = (id) => (id === MAIN_PROFILE ? LS_KEY : `${LS_KEY}:perfil:${id}`);
+// preferências do aparelho que valem para todos os perfis
+const SHARED_PREFS = ['theme', 'lock', 'autoSavePrints', 'hideValues'];
+
+function readProfiles() {
+  try {
+    const p = JSON.parse(localStorage.getItem(LS_PROFILES) || 'null');
+    if (p?.list?.some((x) => x.id === MAIN_PROFILE)) return p;
+  } catch {
+    /* sem perfis salvos */
+  }
+  return { active: MAIN_PROFILE, list: [{ id: MAIN_PROFILE, name: '', color: 0 }] };
+}
+let profiles = readProfiles();
+function writeProfiles() {
+  try {
+    localStorage.setItem(LS_PROFILES, JSON.stringify(profiles));
+  } catch {
+    /* segue só em memória */
+  }
+}
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -27,9 +52,9 @@ const listeners = new Set();
 export const getState = () => state;
 export const subscribe = (fn) => (listeners.add(fn), () => listeners.delete(fn));
 
-function readLocal() {
+function readLocal(id = profiles.active) {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(profileKey(id));
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -38,7 +63,7 @@ function readLocal() {
 
 function writeLocal() {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(state));
+    localStorage.setItem(profileKey(profiles.active), JSON.stringify(state));
   } catch {
     /* modo privado ou armazenamento cheio: segue só em memória */
   }
@@ -107,6 +132,70 @@ export function init() {
   writeLocal();
   cloud.connect();
   return state;
+}
+
+// ---------- Perfis ----------
+
+/** Perfis cadastrados, com o nome de exibição (o principal usa o seu nome dos Ajustes). */
+export function getProfiles() {
+  return profiles.list.map((p) => ({ ...p, active: p.id === profiles.active, label: p.id === MAIN_PROFILE ? (p.id === profiles.active ? state.settings.name : readLocal(p.id)?.settings?.name) || 'Eu' : p.name }));
+}
+export const activeProfile = () => getProfiles().find((p) => p.active);
+
+/** Dados guardados de um perfil (sem trocar), para mostrar o resumo de cada um. */
+export const profileData = (id) => (id === profiles.active ? state : migrate(readLocal(id) || empty()));
+
+export function addProfile(name) {
+  const clean = String(name || '').trim().slice(0, 30);
+  if (!clean) return null;
+  const id = uid();
+  const used = new Set(profiles.list.map((p) => p.color));
+  const color = [1, 2, 3, 4, 5, 6, 7].find((c) => !used.has(c)) ?? profiles.list.length % 8;
+  profiles.list.push({ id, name: clean, color });
+  writeProfiles();
+  return id;
+}
+
+export function renameProfile(id, name) {
+  const clean = String(name || '').trim().slice(0, 30);
+  if (!clean) return;
+  if (id === MAIN_PROFILE) return updateSettings({ name: clean });
+  const p = profiles.list.find((x) => x.id === id);
+  if (p) p.name = clean;
+  writeProfiles();
+  if (id === profiles.active) return updateSettings({ name: clean });
+  listeners.forEach((fn) => fn(state));
+}
+
+/** Remove um perfil que não está aberto (e os dados dele). O principal não sai. */
+export function removeProfile(id) {
+  if (id === MAIN_PROFILE || id === profiles.active) return false;
+  profiles.list = profiles.list.filter((p) => p.id !== id);
+  writeProfiles();
+  try {
+    localStorage.removeItem(profileKey(id));
+  } catch {
+    /* ignore */
+  }
+  listeners.forEach((fn) => fn(state));
+  return true;
+}
+
+/** Abre outro perfil: guarda o atual, carrega o outro e mantém as preferências do aparelho. */
+export function switchProfile(id) {
+  const target = profiles.list.find((p) => p.id === id);
+  if (!target || id === profiles.active) return false;
+  writeLocal();
+  const shared = Object.fromEntries(SHARED_PREFS.filter((k) => k in state.settings).map((k) => [k, state.settings[k]]));
+  profiles.active = id;
+  writeProfiles();
+  const loaded = readLocal(id);
+  state = migrate(loaded || empty());
+  if (!loaded && id !== MAIN_PROFILE) state.settings.name = target.name;
+  state.settings = { ...state.settings, ...shared, resetDone: RESET_ID };
+  writeLocal();
+  listeners.forEach((fn) => fn(state));
+  return true;
 }
 
 // ---------- Chave da API (só neste aparelho, nunca sincroniza) ----------
@@ -482,6 +571,11 @@ export function setBudget(catId, value) {
 }
 
 export function updateSettings(patch) {
+  // "Seu nome" num perfil que não é o principal também renomeia o perfil
+  if (patch.name && profiles.active !== MAIN_PROFILE) {
+    const p = profiles.list.find((x) => x.id === profiles.active);
+    if (p) (p.name = patch.name), writeProfiles();
+  }
   commit((s) => Object.assign(s.settings, patch));
 }
 
@@ -528,7 +622,7 @@ export const cloud = {
 
   async connect() {
     const c = typeof window !== 'undefined' ? window.claude : null;
-    if (!c?.use) return;
+    if (!c?.use || profiles.active !== MAIN_PROFILE) return;
     this.setStatus('conectando');
     try {
       const [db, user] = await Promise.all([c.use('db'), c.use('user')]);
@@ -568,7 +662,8 @@ export const cloud = {
   },
 
   schedule() {
-    if (!this.col) return;
+    // a pasta da conta guarda só o perfil principal
+    if (!this.col || profiles.active !== MAIN_PROFILE) return;
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.flush(), 800);
   },

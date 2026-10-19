@@ -8,6 +8,7 @@ import { openAddMenu } from './views/adicionar.js';
 import { openFileImport, openTextImport } from './views/arquivo.js';
 import { isNativeApp, startNative } from './native.js';
 import { setupLock } from './lock.js';
+import { openProfiles, profileChip } from './views/perfis.js';
 import inicio from './views/home.js';
 import extrato from './views/extrato.js';
 import relatorios from './views/relatorios.js';
@@ -70,7 +71,11 @@ function render({ keepFocus } = {}) {
   const caret = keepFocus ? document.querySelector(keepFocus)?.selectionStart : null;
   const back = view.back ? html`<button type="button" class="back" data-go="${view.back}">${icon('chevL')} Voltar</button>` : '';
   // Ajustes sempre à mão, no canto de cima de toda tela (o Início já tem o seu no cabeçalho verde)
-  const gear = view.id === 'inicio' || view.id === 'ajustes' ? '' : html`<button type="button" class="icon-btn page-gear" data-go="ajustes" aria-label="Ajustes">${icon('gear')}</button>`;
+  // perfil aberto e Ajustes sempre à mão, no canto de cima de toda tela (o Início tem os seus no cabeçalho verde)
+  const gear =
+    view.id === 'inicio'
+      ? ''
+      : html`<div class="page-gear">${profileChip()}${view.id === 'ajustes' ? '' : html`<button type="button" class="icon-btn" data-go="ajustes" aria-label="Ajustes">${icon('gear')}</button>`}</div>`;
   // um contêiner novo a cada render: os listeners de bind() não se acumulam
   const page = document.createElement('div');
   page.className = 'page';
@@ -98,6 +103,7 @@ document.addEventListener('click', (e) => {
     return go(g.dataset.go, { filter: g.dataset.filter });
   }
   if (e.target.closest('[data-new]')) return openAddMenu();
+  if (e.target.closest('[data-profiles]')) return openProfiles();
   const m = e.target.closest('[data-month]');
   if (m) {
     ui.month = addMonths(ui.month, +m.dataset.month);

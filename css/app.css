@@ -600,8 +600,8 @@ p.pill { white-space: normal; display: inline; line-height: 1.6; }
 
 /* ---------- Alinhamento ---------- */
 .page > * { flex-shrink: 0; } /* blocos da tela nunca encolhem (botões empilhados ficavam achatados) */
-.page-gear { position: absolute; top: 10px; right: var(--gr); z-index: 2; }
-.page > .page-gear + .page-head h1 { padding-right: 44px; } /* título não passa por baixo da engrenagem */
+.page-gear { position: absolute; top: 10px; right: var(--gr); z-index: 2; display: flex; align-items: center; gap: 2px; }
+.page > .page-gear + .page-head h1 { padding-right: 180px; } /* título não passa por baixo da engrenagem */
 .type-seg span { white-space: nowrap; gap: 4px; padding: 0 4px; font-size: 12.5px; }
 .btn-row.column { flex-direction: column; flex-wrap: nowrap; }
 .btn-row.column > .btn { width: 100%; }
@@ -617,3 +617,19 @@ body.has-sheet #toasts { top: calc(var(--safe-area-inset-top, env(safe-area-inse
 .miss-row { display: grid; grid-template-columns: 1fr 84px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
 .miss-row small { display: block; color: var(--muted); font-size: 12px; }
 .miss-row b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Perfis ---------- */
+.avatar { width: 28px; height: 28px; border-radius: 50%; display: inline-grid; place-items: center; font: 800 13px var(--font-num); color: #ffffff; background: #0a8550; flex: none; }
+.avatar.lg { width: 40px; height: 40px; font-size: 17px; }
+.avatar.c1 { background: #7c4dff; } .avatar.c2 { background: #e8590c; } .avatar.c3 { background: #1c7ed6; } .avatar.c4 { background: #d6336c; }
+.avatar.c5 { background: #0c8599; } .avatar.c6 { background: #a07a00; } .avatar.c7 { background: #5c7cfa; }
+.profile-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 132px; height: 36px; padding: 0 6px 0 4px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-weight: 800; font-size: 13px; }
+.profile-chip.on-brand { background: rgba(255, 255, 255, 0.16); border-color: transparent; color: inherit; }
+.profile-chip .profile-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.profile-chip .chev { width: 14px; height: 14px; transform: rotate(90deg); opacity: 0.7; flex: none; }
+.profile-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; }
+.profile-row { display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.profile-row.on { box-shadow: inset 0 0 0 2px var(--brand); }
+.profile-pick { flex: 1; display: flex; align-items: center; gap: 12px; border: 0; background: none; color: inherit; text-align: left; padding: 4px 0; min-width: 0; }
+.profile-pick small { display: block; color: var(--muted); font-size: 12px; }
+.icon-btn.danger { color: var(--expense); }

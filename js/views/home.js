@@ -5,6 +5,7 @@ import { toISO } from '../parser.js';
 import { clearDemo, deleteTransactions, restoreTransactions, updateSettings } from '../store.js';
 import { emptyState, hbars, html, icon, money, monthName, progress, toast } from '../ui.js';
 import { txRow } from './extrato.js';
+import { profileChip } from './perfis.js';
 import { insightCard } from './dicas.js';
 import { openPrintSheet, openTxForm, quickPreview, quickSave } from './form.js';
 import { openLoanContract } from './emprestimo.js';
@@ -32,6 +33,7 @@ export default {
       <div class="hero-top">
         <div><p class="hello">${hello}${name ? `, ${name}` : ''}</p><p class="hero-month">${monthName(key)}</p></div>
         <div class="hero-actions">
+          ${profileChip(true)}
           <button type="button" class="icon-btn on-brand" data-act="toggle-hide" aria-label="${hide ? 'Mostrar valores' : 'Ocultar valores'}">${icon(hide ? 'eyeOff' : 'eye')}</button>
           <button type="button" class="icon-btn on-brand" data-go="ajustes" aria-label="Ajustes">${icon('gear')}</button>
         </div>
