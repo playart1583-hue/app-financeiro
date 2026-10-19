@@ -8,7 +8,6 @@ export default {
   back: 'planejar',
   render({ state, ui }) {
     const s = ui.pix || (ui.pix = { cash: 450, n: 6, pmt: 89.9, antecipada: false });
-    const rate = state.settings.savingsRate;
     return html`<header class="page-head"><h1>Simulador de Pix parcelado</h1><p>Informe o preço à vista e a parcela oferecida. Eu calculo os juros escondidos.</p></header>
       <section class="card">
         <form class="form" id="pixf" novalidate>
@@ -22,18 +21,27 @@ export default {
         <div id="pix-out" aria-live="polite"></div>
       </section>
       <section class="card">
-        <h2 class="card-title">${icon('calc')} Quanto fica a parcela com uma taxa?</h2>
-        <p class="hint">Útil para comparar ofertas: Pix parcelado costuma cobrar de 3% a 9% ao mês; cartão parcelado com juros, de 2% a 9%.</p>
-        <div class="table-wrap"><table><thead><tr><th>Taxa a.m.</th>${[3, 6, 10, 12].map((n) => html`<th>${n}x (R$)</th>`)}</tr></thead>
-          <tbody>${[0.02, 0.04, 0.06, 0.08].map((r) => html`<tr><td>${pct(r)}</td>${[3, 6, 10, 12].map((n) => html`<td>${money(pricePayment(s.cash || 0, r, n), { force: true, bare: true })}</td>`)}</tr>`)}</tbody></table></div>
-        <p class="hint">Valores para um preço à vista de ${money(s.cash || 0, { force: true })}. Seu cofrinho rende cerca de ${pct(rate, 2)} ao mês (ajuste em Ajustes).</p>
+        <h2 class="card-title">${icon('calc')} Simular com a taxa do banco</h2>
+        <p class="hint">Cada banco cobra uma taxa diferente, então o app não supõe nenhuma. Se o banco ou o app informou a taxa, escreva aqui para ver a parcela em outros prazos.</p>
+        <form class="form" id="ratef" novalidate><label class="field"><span>Taxa informada pelo banco (% ao mês)</span><input name="rate" inputmode="decimal" value="${s.bankRate ? String(s.bankRate * 100).replace('.', ',') : ''}" placeholder="Em branco = sem simulação"></label></form>
+        ${s.bankRate > 0
+          ? html`<div class="table-wrap"><table><thead><tr><th>Parcelas</th><th>Parcela (R$)</th><th>Total (R$)</th></tr></thead>
+              <tbody>${[3, 6, 10, 12].map((n) => html`<tr><td>${n}x</td><td>${money(pricePayment(s.cash || 0, s.bankRate, n), { force: true, bare: true })}</td><td>${money(pricePayment(s.cash || 0, s.bankRate, n) * n, { force: true, bare: true })}</td></tr>`)}</tbody></table></div>
+            <p class="hint">Preço à vista de ${money(s.cash || 0, { force: true })} com ${pct(s.bankRate, 2)} ao mês.</p>`
+          : ''}
       </section>`;
   },
-  bind(root, { state, ui }) {
+  bind(root, { state, ui, rerender }) {
+    root.querySelector('#ratef').addEventListener('change', (e) => {
+      const r = readMoney(e.target.value) / 100;
+      ui.pix.bankRate = r > 0 && r < 1 ? r : 0;
+      // o "change" chega quando o campo perde o foco: redesenha depois, fora do evento
+      setTimeout(() => rerender());
+    });
     const f = root.querySelector('#pixf');
     const out = root.querySelector('#pix-out');
     const calc = () => {
-      const s = (ui.pix = { cash: readMoney(f.cash.value), n: Math.max(1, Math.floor(+f.n.value || 1)), pmt: readMoney(f.pmt.value), antecipada: f.antecipada.checked });
+      const s = (ui.pix = { ...ui.pix, cash: readMoney(f.cash.value), n: Math.max(1, Math.floor(+f.n.value || 1)), pmt: readMoney(f.pmt.value), antecipada: f.antecipada.checked });
       if (!(s.cash > 0) || !(s.pmt > 0)) {
         out.innerHTML = '<p class="hint">Preencha o preço à vista e a parcela.</p>';
         return;

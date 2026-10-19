@@ -1,9 +1,9 @@
-import { addMonths, averages, debtsForPlan, interestCommitments, keyOf, loanBalance, loanDueDates, loanIsOpen, loanMonthly } from '../analytics.js';
+import { addMonths, averages, debtsForPlan, keyOf, loanBalance, loanDueDates, loanIsOpen, loanMonthly } from '../analytics.js';
 import { monthlyToAnnual, pricePayment, rateFromInstallments, simulateExtraPayment, simulatePayoff } from '../finance.js';
 import { parseSerasaText, toISO } from '../parser.js';
 import { analyzeSerasa } from '../receipt.js';
 import { openReader } from './reader.js';
-import { addLoan, amortizeLoan, deleteLoan, negotiateLoan, payLoan, payoffInstallments } from '../store.js';
+import { addLoan, amortizeLoan, deleteLoan, negotiateLoan, payLoan } from '../store.js';
 import { openLoanContract } from './emprestimo.js';
 import { dateBR, emptyState, html, icon, money, moneyInput, monthName, openSheet, pct, progress, readMoney, toast } from '../ui.js';
 
@@ -52,28 +52,6 @@ function loanCard(l) {
         </div>`
       : html`<p class="pill ok">${icon('check')} Quitada</p>`}
   </article>`;
-}
-
-const KIND_LABEL = { pix_parcelado: 'Pix parcelado', cartao_parcelado: 'Cartão parcelado', parcelamento: 'Parcelamento', ...KINDS };
-
-function earlyPayoff(state) {
-  const all = interestCommitments(state, new Date());
-  const paid = all.filter((c) => !c.interestFree && c.savings > 1);
-  const free = all.filter((c) => c.interestFree);
-  if (!paid.length && !free.length) return '';
-  return html`<section class="card">
-    <h2 class="card-title">${icon('bolt')} Encerre primeiro para pagar menos juros</h2>
-    <p class="hint">Do mais caro para o mais barato. Ao quitar antes, os juros das parcelas futuras são descontados (Código de Defesa do Consumidor, art. 52): peça ao credor o valor de quitação antecipada.</p>
-    <ol class="payoff-list">${paid.map(
-      (c, i) => html`<li class="payoff ${i === 0 ? 'first' : ''}">
-        <div class="row-between"><b>${i + 1}. ${c.name}</b><span class="pill ${c.rate >= 0.05 ? 'bad' : 'warn'}">${pct(c.rate, 1)} a.m.</span></div>
-        <small class="muted">${KIND_LABEL[c.kind] || 'Dívida'}${c.remaining ? ` · faltam ${c.remaining} de ${money(c.pmt)}` : c.neverEnds ? ' · pagando o mínimo, não acaba' : ` · mínimo ${money(c.pmt)}`}</small>
-        <dl class="mini-kv"><div><dt>Falta pagar</dt><dd>${c.neverEnds ? 'sem fim' : money(c.remainingTotal)}</dd></div><div><dt>Quitar hoje</dt><dd>~${money(c.payoffToday)}</dd></div><div><dt>Economia</dt><dd class="income">${money(c.savings)}</dd></div></dl>
-        <div class="goal-actions"><button type="button" class="btn sm ${i === 0 ? 'primary' : ''}" data-act="early" data-id="${c.id}">${icon('check')} Quitei antecipado</button></div>
-      </li>`,
-    )}</ol>
-    ${free.length ? html`<p class="hint">${icon('info')} Sem juros: ${free.map((c) => c.name).join(', ')}. Não vale antecipar: deixe o dinheiro rendendo no cofrinho e pague as parcelas no prazo.</p>` : ''}
-  </section>`;
 }
 
 function plan(state, ui) {
@@ -147,7 +125,6 @@ export default {
         <button type="button" class="btn" data-act="serasa">${icon('shield')} Importar do Serasa</button>
         <button type="button" class="btn" data-act="contract">${icon('camera')} Analisar contrato de empréstimo</button>
       </div>
-      ${earlyPayoff(state)}
       ${plan(state, ui)}
       ${neg.length ? html`<h2 class="section-title">Negativadas · priorize para limpar o nome</h2>${neg.map(loanCard)}` : ''}
       ${juro.length ? html`<h2 class="section-title">Com juros · da mais cara para a mais barata</h2>${juro.map(loanCard)}` : ''}
@@ -166,8 +143,6 @@ export default {
           return openSerasaImport();
         case 'contract':
           return openLoanContract();
-        case 'early':
-          return openEarlyPayoff(b.dataset.id, state);
         case 'pay':
           return openPay(l);
         case 'negotiate':
@@ -201,32 +176,6 @@ export default {
     });
   },
 };
-
-function openEarlyPayoff(id, state) {
-  const c = interestCommitments(state, new Date()).find((x) => x.id === id);
-  if (!c) return;
-  openSheet({
-    title: `Quitar ${c.name}`,
-    body: html`<form class="form" id="ef">
-      <p>Valor estimado para quitar hoje: <b>${money(c.payoffToday, { force: true })}</b>${c.savings > 0 ? html` · economia de <b class="income">${money(c.savings, { force: true })}</b> em juros` : ''}.</p>
-      <label class="amount-field"><span class="cur">R$</span><input name="amount" inputmode="decimal" value="${moneyInput(c.payoffToday)}"></label>
-      <p class="hint">Use o valor exato que o banco ou app informar para quitação. ${c.source === 'parcelamento' ? 'As parcelas futuras saem das projeções.' : 'A dívida fica marcada como quitada.'}</p>
-      <button class="btn primary" type="submit">Confirmar quitação</button>
-    </form>`,
-    onMount(sheet) {
-      sheet.body.querySelector('#ef').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const v = readMoney(e.target.amount.value);
-        if (!(v > 0)) return;
-        if (c.source === 'parcelamento') payoffInstallments(c.id, v);
-        else if (state.loans.find((l) => l.id === c.id)?.mode === 'parcelado') amortizeLoan(c.id, v);
-        else payLoan(c.id, v);
-        sheet.close();
-        toast(`${c.name} quitado. Menos ${money(c.pmt, { force: true })} comprometidos por mês.`);
-      });
-    },
-  });
-}
 
 function openPay(l) {
   const suggested = l.mode === 'parcelado' ? l.pmt : l.mode === 'acordo' ? l.offer || l.balance : l.minPayment;
@@ -329,7 +278,7 @@ function openLoanForm() {
     </div>
     <div data-mode="rotativo" hidden>
       <label class="field"><span>Tipo</span><select name="kind2"><option value="cartao">Cartão de crédito (rotativo)</option><option value="cheque">Cheque especial</option><option value="outro">Outro</option></select></label>
-      <div class="row2"><label class="field"><span>Saldo devedor</span><input name="balance" inputmode="decimal"></label><label class="field"><span>Taxa % ao mês</span><input name="rate2" inputmode="decimal" value="14"></label></div>
+      <div class="row2"><label class="field"><span>Saldo devedor</span><input name="balance" inputmode="decimal"></label><label class="field"><span>Taxa % ao mês</span><input name="rate2" inputmode="decimal" placeholder="a do banco (opcional)"></label></div>
       <label class="field"><span>Pagamento mínimo / quanto paga por mês</span><input name="minPayment" inputmode="decimal"></label>
     </div>
     <div data-mode="acordo" hidden>

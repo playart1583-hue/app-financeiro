@@ -487,28 +487,6 @@ export function amortizeLoan(id, extra, date = toISO(new Date())) {
   });
 }
 
-/** Quita antecipadamente um parcelamento (Pix parcelado, cartão): remove as parcelas futuras e lança o valor pago hoje. */
-export function payoffInstallments(groupId, amount, date = toISO(new Date())) {
-  commit((s) => {
-    const list = s.transactions.filter((t) => t.installment?.groupId === groupId);
-    if (!list.length) return;
-    const future = list.filter((t) => t.date > date);
-    const ref = list[0];
-    s.transactions = s.transactions.filter((t) => !future.includes(t));
-    s.transactions.push({
-      ...ref,
-      id: uid(),
-      amount: round2(amount),
-      date,
-      time: '',
-      description: `Quitação antecipada: ${ref.description}`,
-      installment: null,
-      source: 'quitacao',
-      createdAt: Date.now(),
-    });
-  });
-}
-
 /** Lançamento parecido já registrado (mesmo tipo, valor e data próxima): evita importar o mesmo lançamento duas vezes. */
 // mesma compra parcelada: mesmo cartão (quando os dois têm) e descrição parecida
 const sameCompra = (a, b) => {

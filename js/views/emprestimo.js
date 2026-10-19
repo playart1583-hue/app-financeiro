@@ -1,10 +1,10 @@
 // Contrato de empréstimo: ler o print, analisar o impacto antes de contratar e, se quiser, adicionar ao app.
-import { addMonthsISO, interestCommitments } from '../analytics.js';
+import { addMonthsISO } from '../analytics.js';
 import { pricePayment } from '../finance.js';
 import { loanImpact } from '../impact.js';
 import { parseLoanText, toISO } from '../parser.js';
 import { analyzeLoanContract } from '../receipt.js';
-import { addLoan, addTransaction, amortizeLoan, getState, payLoan, payoffInstallments } from '../store.js';
+import { addLoan, addTransaction, getState } from '../store.js';
 import { dateBR, html, icon, money, moneyInput, monthName, openSheet, pct, readMoney, toast } from '../ui.js';
 import { openReader } from './reader.js';
 
@@ -73,7 +73,6 @@ function impactHTML(r) {
 /** Revisão + análise de impacto. Fecha sem salvar se for só simulação. */
 export function openLoanReview(data = {}, engine = null) {
   const today = toISO(new Date());
-  const candidates = interestCommitments(getState()).filter((c) => !c.interestFree);
   const found = [
     data.creditor && `Credor: ${data.creditor}`,
     data.released && `Liberado: ${money(data.released, { force: true })}`,
@@ -105,11 +104,6 @@ export function openLoanReview(data = {}, engine = null) {
       <label class="field"><span>CET (% a.m.)</span><input name="cet" inputmode="decimal" value="${data.cetMonthly != null ? (data.cetMonthly * 100).toFixed(2).replace('.', ',') : ''}" placeholder="opcional"></label>
     </div>
     <label class="field"><span>1ª parcela</span><input name="firstDue" type="date" value="${data.firstDue || addMonthsISO(today, 1)}"></label>
-    ${candidates.length
-      ? html`<fieldset class="field"><legend>Vai usar o dinheiro para quitar alguma dívida?</legend>
-          ${candidates.map((c) => html`<label class="check"><input type="checkbox" name="payoff" value="${c.id}"> <span>${c.name} · quitar hoje por ~${money(c.payoffToday, { force: true })} (${pct(c.rate, 1)} a.m.)</span></label>`)}
-        </fieldset>`
-      : ''}
     <div id="lr-impact" class="impact-box" aria-live="polite"></div>
     <label class="check"><input type="checkbox" name="credit" checked> <span>Ao adicionar, lançar o valor recebido no saldo</span></label>
     <p class="field-error" hidden></p>
@@ -139,11 +133,10 @@ export function openLoanReview(data = {}, engine = null) {
           firstDue: f.firstDue.value,
         };
       };
-      const payoffIds = () => [...f.querySelectorAll('[name=payoff]:checked')].map((c) => c.value);
       let timer = null;
       const render = () => {
         const o = read();
-        const r = o.n > 0 && o.pmt > 0 && (o.released || o.financed) ? loanImpact(getState(), o, payoffIds()) : null;
+        const r = o.n > 0 && o.pmt > 0 && (o.released || o.financed) ? loanImpact(getState(), o, []) : null;
         sheet.body.querySelector('#lr-impact').innerHTML = String(impactHTML(r));
       };
       f.addEventListener('input', () => {
@@ -165,14 +158,8 @@ export function openLoanReview(data = {}, engine = null) {
         const principal = o.financed || o.released;
         const id = addLoan({ mode: 'parcelado', name, kind: o.kind, principal, n: o.n, pmt: o.pmt, rate: null, firstDue: o.firstDue, paid: 0, creditor: o.creditor, released: o.released, fees: o.financed && o.released ? o.financed - o.released : null, cetMonthly: o.cetMonthly, statedRate: o.statedRate, source: engine ? 'contrato' : 'manual' });
         if (f.credit.checked) addTransaction({ type: 'income', amount: o.released || o.financed, description: `Empréstimo recebido${o.creditor ? ` · ${o.creditor}` : ''}`, category: 'emprestimo-recebido', date: today, method: 'transferencia', source: 'emprestimo', loanId: id });
-        const chosen = candidates.filter((c) => payoffIds().includes(c.id));
-        for (const c of chosen) {
-          if (c.source === 'parcelamento') payoffInstallments(c.id, c.payoffToday);
-          else if (getState().loans.find((l) => l.id === c.id)?.mode === 'parcelado') amortizeLoan(c.id, c.payoffToday);
-          else payLoan(c.id, c.payoffToday);
-        }
         sheet.close();
-        toast(chosen.length ? `Empréstimo adicionado e ${chosen.length} dívida${chosen.length > 1 ? 's' : ''} quitada${chosen.length > 1 ? 's' : ''}` : `Empréstimo adicionado: ${o.n}x de ${money(o.pmt, { force: true })}`);
+        toast(`Empréstimo adicionado: ${o.n}x de ${money(o.pmt, { force: true })}`);
       });
     },
   });

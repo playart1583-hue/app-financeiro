@@ -16,12 +16,11 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 | Extrato por mês com busca e filtros; toque para editar ou excluir (inclusive todas as parcelas) | Extrato |
 | Relatórios mensais: categorias, regra 50/30/20, receitas × despesas em 6 meses, maiores gastos, formas de pagamento | Relatórios |
 | **Projeção de gastos**: fim do mês no ritmo atual, quanto pode gastar por dia, e os próximos 6 meses (parcelas, contas fixas, dívidas + média do dia a dia) | Início e Relatórios |
-| **Pix parcelado: quanto de juros** — taxa ao mês, ao ano, juros em R$ e se compensa parcelar | formulário e Planejar → Simulador |
+| **Pix parcelado: quanto de juros** — calculado só com o preço à vista e a parcela que você informa (taxa ao mês, ao ano, juros em R$); simulação com outra taxa só se você digitar a taxa do banco | formulário e Planejar → Simulador |
 | **Empréstimos e dívidas**: parcelados (calcula a taxa a partir da parcela), cartão rotativo/cheque especial, negativadas; pagar parcela, simular amortização | Planejar → Dívidas |
 | **Dívidas do Serasa**: importar por print ou texto do Serasa Limpa Nome, com oferta de desconto | Dívidas → *Importar do Serasa* |
 | **Plano para zerar dívidas**: compara *Nome limpo primeiro*, *Avalanche* (menos juros) e *Bola de neve*; mostra o mês em que cada dívida acaba | Dívidas |
 | **Contrato de empréstimo por print**: lê valor liberado, valor financiado, parcelas, taxa, CET, IOF, tarifas e seguro; mostra o custo real, **o que melhora, o que piora e o impacto no dia a dia** (sobra mensal antes × depois, % da renda comprometida, metas que atrasam) antes de você contratar; pode quitar dívidas caras com o dinheiro | Início → *Empréstimo* · Planejar · Dívidas |
-| **Encerre primeiro**: ranking de Pix parcelados, parcelamentos com juros e empréstimos do mais caro para o mais barato, com valor para quitar hoje e juros economizados (desconto obrigatório na quitação antecipada, CDC art. 52) | Dívidas e Dicas |
 | **Importar arquivos** de bancos e outros apps: CSV, TSV, TXT, **OFX**, Excel (XLSX/XLS/ODS), JSON e PDF de extrato. Reconhece Nubank, Inter, Mercado Pago, Mobills/Organizze e planilhas genéricas; você ajusta as colunas, revê categorias e os repetidos ficam desmarcados | Extrato → *Importar arquivo* · Início → *Arquivo* |
 | **Importar a fatura do cartão** (PDF, prints das páginas, CSV ou OFX): lê cartão, vencimento e total, ignora o pagamento da fatura, marca estornos e juros/IOF, detecta parcelas ("3/10") e cria as parcelas futuras; confere a soma com o total da fatura | Extrato → *Importar fatura* · Início → *Fatura* |
 | Cofrinhos (metas) com quanto guardar por mês até o prazo e rendimento estimado | Planejar → Cofrinhos |
@@ -122,4 +121,4 @@ js/views/*.js                              telas
 tests/                                     testes (node --test)
 ```
 
-Os cálculos são estimativas e não substituem orientação financeira profissional.
+Os cálculos usam só os números que você informa: o app não supõe taxas de juros (cada banco tem a sua) nem simula valor de quitação antecipada — esse valor só o credor informa. Não substituem orientação financeira profissional.

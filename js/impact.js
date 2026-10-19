@@ -1,6 +1,6 @@
 // Impacto de um empréstimo no seu mês: custo real, o que melhora, o que piora e o efeito no dia a dia.
 import { addMonths, addMonthsISO, averageOf, goalSaved, interestCommitments, keyOf, monthKey, projectNextMonths } from './analytics.js';
-import { REFERENCE_RATES, analyzeLoanOffer, monthlyToReach, round2 } from './finance.js';
+import { analyzeLoanOffer, monthlyToReach, round2 } from './finance.js';
 import { toISO } from './parser.js';
 
 const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -54,7 +54,6 @@ export function loanImpact(state, offer, payoffIds = [], today = new Date()) {
       return s + monthlyToReach(g.target, goalSaved(g), state.settings.savingsRate || 0, mm);
     }, 0);
 
-  const ref = REFERENCE_RATES[offer.kind] ?? REFERENCE_RATES.emprestimo;
   const good = [];
   const bad = [];
   const daily = [];
@@ -63,9 +62,8 @@ export function loanImpact(state, offer, payoffIds = [], today = new Date()) {
   bad.push(`Você recebe ${brl(a.base)} e devolve ${brl(a.total)}: ${brl(a.cost)} de juros e custos (${pct(a.costPct)} a mais).`);
   if (a.fees > 0) bad.push(`${brl(a.fees)} de IOF, tarifas e seguro entram no valor financiado e também pagam juros.`);
   if (offer.cetMonthly && a.nominal && offer.cetMonthly - a.nominal > 0.003) bad.push(`O custo efetivo (CET ${pct(offer.cetMonthly, 2)} a.m.) é maior que a taxa anunciada (${pct(a.nominal, 2)} a.m.). Compare ofertas sempre pelo CET.`);
-  if (a.effRate > ref * 1.25) bad.push(`Taxa real de ${pct(a.effRate, 2)} ao mês, acima da referência aproximada para esse tipo de crédito (~${pct(ref, 1)} a.m.). Vale pedir outra proposta.`);
-  else if (a.effRate < ref * 0.8) good.push(`Taxa real de ${pct(a.effRate, 2)} ao mês, abaixo da referência aproximada para esse tipo de crédito (~${pct(ref, 1)} a.m.).`);
-  else good.push(`Taxa real de ${pct(a.effRate, 2)} ao mês, na faixa comum para esse tipo de crédito (~${pct(ref, 1)} a.m.).`);
+  // taxa só a calculada com os números do próprio contrato (cada banco tem a sua; o app não compara com "média")
+  if (a.effRate > 0) bad.push(`Taxa real de ${pct(a.effRate, 2)} ao mês, calculada com o valor recebido, as parcelas e o prazo do contrato. Para comparar, peça a proposta de outro banco e coloque aqui.`);
   if (offer.n > 36) bad.push(`Prazo longo (${offer.n} meses): a parcela fica menor, mas você paga juros por mais tempo. Cada ano a menos de prazo reduz bastante o total.`);
 
   // troca de dívida
@@ -105,14 +103,13 @@ export function loanImpact(state, offer, payoffIds = [], today = new Date()) {
   } else if (surplusAfter < 0 || ratioAfter > 0.35 || negativeMonths >= 2) {
     level = 'alerta';
     title = 'Não recomendado agora: aperta demais o seu mês';
-  } else if (a.effRate > ref * 1.25 || ratioAfter > 0.3 || (chosen.length && !swapPays)) {
+  } else if (ratioAfter > 0.3 || (chosen.length && !swapPays)) {
     level = 'atencao';
     title = 'Dá para fazer, mas com cuidado';
   }
 
   return {
     offer: a,
-    ref,
     income,
     commitBefore: round2(commitBefore),
     commitAfter: round2(commitAfter),

@@ -200,16 +200,16 @@ export function interestCommitments(state, today = new Date()) {
   return out.sort((a, b) => a.interestFree - b.interestFree || b.rate - a.rate);
 }
 
-/** Converte dívidas abertas (inclusive parcelamentos com juros) para o simulador de quitação. */
+/**
+ * Converte dívidas abertas para o plano de quitação. Pix parcelado e compras parceladas ficam de fora:
+ * as parcelas são fixas no contrato e adiantar não tira os juros.
+ */
 export function debtsForPlan(state, today = new Date()) {
   const loans = state.loans.filter(loanIsOpen).map((l) => {
     if (l.mode === 'acordo') return { id: l.id, name: l.name, kind: 'acordo', balance: l.offer || l.balance, original: l.balance };
     return { id: l.id, name: l.name, kind: 'juros', balance: loanBalance(l), rate: l.rate || 0, minPayment: loanMonthly(l) };
   });
-  const parcelamentos = interestCommitments(state, today)
-    .filter((c) => c.source === 'parcelamento' && !c.interestFree)
-    .map((c) => ({ id: c.id, name: c.name, kind: 'juros', balance: c.payoffToday, rate: c.rate, minPayment: c.pmt }));
-  return [...loans, ...parcelamentos];
+  return loans;
 }
 
 // ---------- Projeções ----------
