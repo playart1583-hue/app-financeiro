@@ -1,12 +1,14 @@
 // Cache simples para o app abrir sem internet depois da primeira visita.
-const CACHE = 'meubolso-v4';
+const CACHE = 'meubolso-v5';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './icons/icon.svg', './css/app.css',
-  './js/main.js', './js/store.js', './js/ui.js', './js/finance.js', './js/analytics.js', './js/insights.js',
-  './js/parser.js', './js/categories.js', './js/receipt.js', './js/demo.js', './js/impact.js',
-  './js/views/reader.js', './js/views/emprestimo.js', './js/views/importar.js', './js/views/arquivo.js', './js/views/adicionar.js', './js/importers.js', './js/documents.js', './js/native.js', './js/lock.js',
-  './js/views/home.js', './js/views/extrato.js', './js/views/relatorios.js', './js/views/planejar.js', './js/views/dicas.js',
-  './js/views/cofrinhos.js', './js/views/dividas.js', './js/views/pix.js', './js/views/orcamentos.js', './js/views/ajustes.js', './js/views/form.js',
+  './js/analytics.js', './js/cards.js', './js/categories.js', './js/demo.js', './js/documents.js', './js/finance.js',
+  './js/impact.js', './js/importers.js', './js/insights.js', './js/interest.js', './js/lock.js', './js/main.js',
+  './js/native.js', './js/parser.js', './js/receipt.js', './js/reminders.js', './js/store.js', './js/transfers.js',
+  './js/ui.js', './js/views/adicionar.js', './js/views/ajustes.js', './js/views/arquivo.js', './js/views/avisos.js', './js/views/cofrinhos.js',
+  './js/views/dicas.js', './js/views/dividas.js', './js/views/emprestimo.js', './js/views/extrato.js', './js/views/form.js', './js/views/home.js',
+  './js/views/juros.js', './js/views/orcamentos.js', './js/views/perfis.js', './js/views/pix.js', './js/views/planejar.js', './js/views/reader.js',
+  './js/views/relatorios.js',
 ];
 
 self.addEventListener('install', (e) => {
