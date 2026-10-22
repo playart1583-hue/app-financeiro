@@ -76,10 +76,17 @@ export function findTime(text) {
 
 function findInstallments(t) {
   // "3x de R$ 50,00", "10x 89,90", "em 6 parcelas de 120,00", "parcela 2/10"
-  let m = t.match(/\b(\d{1,2})\s*x\s*(?:de\s*)?(?:r\$\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?)?/);
-  if (m && +m[1] > 0 && +m[1] <= 72) return { n: +m[1], pmt: m[2] ? parseAmount(m[2]) : null };
-  m = t.match(/\b(?:em\s*)?(\d{1,2})\s*parcelas?(?:\s*(?:mensais|iguais))?(?:\s*de\s*(?:r\$\s*)?(\d[\d.,]*))?/);
-  if (m && +m[1] > 0) return { n: +m[1], pmt: m[2] ? parseAmount(m[2]) : null };
+  // o número e o "x" ficam na mesma linha e o número não é parte de hora ou data ("12:48" + o X de fechar não é 48x);
+  // a linha que fala de parcelamento vem primeiro
+  const NX = /(?<![\d:/.,])(\d{1,2})[ \t]*x(?![a-z])[ \t]*(?:de[ \t]*)?(?:r\$[ \t]*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?)?/;
+  const NP = /(?<![\d:/.,])(?:em[ \t]*)?(\d{1,2})[ \t]*parcelas?(?:[ \t]*(?:mensais|iguais))?(?:[ \t]*de[ \t]*(?:r\$[ \t]*)?(\d[\d.,]*))?/;
+  const lines = String(t).split('\n');
+  for (const l of [...lines.filter((x) => /parcel/.test(x)), ...lines]) {
+    let m = l.match(NX);
+    if (m && +m[1] > 0 && +m[1] <= 72) return { n: +m[1], pmt: m[2] ? parseAmount(m[2]) : null };
+    m = l.match(NP);
+    if (m && +m[1] > 0) return { n: +m[1], pmt: m[2] ? parseAmount(m[2]) : null };
+  }
   return null;
 }
 

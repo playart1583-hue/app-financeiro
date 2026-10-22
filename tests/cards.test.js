@@ -99,3 +99,13 @@ test('juros por operação: taxa no lançamento, parcelado com juros e emprésti
   assert.equal(nov.total, 42.34); // 12,34 do Pix + 30 da parcela 2 do empréstimo (a pagar)
   assert.deepEqual(interestOperations(state, '2026-10-22').map((o) => [o.kind, o.interest]), [['pix_parcelado', 49.36], ['emprestimo', 300]].sort((a, b) => b[1] - a[1]));
 });
+
+test('parcelas: hora do celular ao lado do X de fechar não vira "48x"', async () => {
+  const { parseReceiptText, parseQuickEntry } = await import('../js/parser.js');
+  const text = '12:48\nX\nTransferência concluída com sucesso\nR$41,95\nPara JC SERVICOS E APOIO\nADMINISTRATIVOS LTDA\nValor original R$41,95\nParcelamento 2 x R$23,91\nData 22/10/26 12:47:58\nVincule sua chave Pix e ganhe até\nR$5,00';
+  const r = parseReceiptText(text, new Date(2026, 9, 22));
+  assert.deepEqual([r.method, r.installments, r.installmentValue, r.amount], ['pix_parcelado', 2, 23.91, 41.95]);
+  assert.equal(parseReceiptText('12:48 X\nCompra R$ 50,00', new Date(2026, 9, 22)).installments, 1);
+  assert.equal(parseQuickEntry('tênis 3x 120 crédito').installments, 3);
+  assert.equal(parseQuickEntry('geladeira em 10 parcelas de 199,90').installments, 10);
+});
