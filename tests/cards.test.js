@@ -65,3 +65,37 @@ test('print do 99Pay: transferência com "Parcelamento 4 x" é Pix parcelado (o 
   // compra no cartão em parcelas continua sendo crédito
   assert.equal(parseReceiptText('Compra aprovada\nTotal R$ 300,00\n3x de R$ 100,00\nVisa final 8238', new Date(2026, 9, 19)).method, 'credito');
 });
+
+test('comprovante com taxa: vale o total (conta + taxa) e a taxa fica separada', async () => {
+  const { parseReceiptText } = await import('../js/parser.js');
+  const r = parseReceiptText('Transação concluída\nR$31,49\nDetalhes da transação\nTransferir para BANCO CSF\nData de pagamento 22/10/26 07:55:46\nValor da conta R$30,00\nTaxa de transação R$1,49\nInstituição 99Pay', new Date(2026, 9, 22));
+  assert.deepEqual([r.amount, r.fee, r.feeKind, r.merchant, r.date], [31.49, 1.49, 'taxa', 'BANCO CSF', '2026-10-22']);
+  // boleto pago com atraso: juros e multa
+  const b = parseReceiptText('Pagamento de boleto\nValor do documento R$ 100,00\nJuros R$ 2,00\nMulta R$ 4,00\nValor pago R$ 106,00', new Date(2026, 9, 22));
+  assert.deepEqual([b.amount, b.fee, b.feeKind], [106, 6, 'juros']);
+  // "sem juros", desconto e taxa em % não são taxa cobrada
+  assert.equal(parseReceiptText('Compra R$ 50,00 em 1x sem juros\nDesconto nas taxas R$ 1,00\nTaxa de juros 2,5% a.m.', new Date(2026, 9, 22)).fee, null);
+});
+
+test('juros por operação: taxa no lançamento, parcelado com juros e empréstimo', async () => {
+  const { interestOf, interestOfMonth, interestOperations } = await import('../js/interest.js');
+  const loans = [{ id: 'L', mode: 'parcelado', n: 10, pmt: 130, principal: 1000, released: 1000, paid: 1, firstDue: '2026-10-10' }];
+  assert.deepEqual(interestOf({ type: 'expense', amount: 31.49, fee: 1.49 }), { amount: 1.49, kind: 'taxa' });
+  assert.deepEqual(interestOf({ type: 'expense', amount: 75.34, method: 'pix_parcelado', installment: { i: 1, n: 4, cash: 252 } }), { amount: 12.34, kind: 'pix_parcelado' });
+  assert.equal(interestOf({ type: 'expense', amount: 36.35, method: 'credito', installment: { i: 1, n: 6, cash: 218.1 } }), null);
+  assert.deepEqual(interestOf({ type: 'expense', amount: 130, loanId: 'L', description: 'Empréstimo (parcela 1/10)' }, loans), { amount: 30, kind: 'emprestimo' });
+  assert.equal(interestOf({ type: 'expense', amount: 31.49, fee: 1.49, internal: true }), null);
+  const state = {
+    transactions: [
+      { id: 'a', type: 'expense', amount: 31.49, fee: 1.49, date: '2026-10-22' },
+      { id: 'b', type: 'expense', amount: 500, date: '2026-10-05', description: 'Mercado' },
+      { id: 'c', type: 'expense', amount: 75.34, method: 'pix_parcelado', date: '2026-11-19', installment: { i: 1, n: 4, groupId: 'g', cash: 252 }, description: 'Pix parcelado' },
+    ],
+    loans,
+  };
+  const out = interestOfMonth(state, '2026-10');
+  assert.equal(out.total, 1.49);
+  const nov = interestOfMonth(state, '2026-11');
+  assert.equal(nov.total, 42.34); // 12,34 do Pix + 30 da parcela 2 do empréstimo (a pagar)
+  assert.deepEqual(interestOperations(state, '2026-10-22').map((o) => [o.kind, o.interest]), [['pix_parcelado', 49.36], ['emprestimo', 300]].sort((a, b) => b[1] - a[1]));
+});

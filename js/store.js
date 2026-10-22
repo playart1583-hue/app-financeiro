@@ -243,6 +243,8 @@ export function addTransaction(draft) {
     ...(draft.firstDue && draft.firstDue !== draft.date ? { purchaseDate: draft.date } : {}),
     // vencimento estimado (Pix parcelado sem o cartão): o cartão, quando você disser qual é, acerta o mês
     ...(draft.dueGuess && draft.firstDue ? { dueGuess: true } : {}),
+    // parte do valor que foi taxa ou juros (o valor continua inteiro; a tela Juros e taxas mostra essa parte)
+    ...(draft.type === 'expense' && n === 1 && draft.fee > 0 ? { fee: round2(Math.min(draft.fee, draft.amount)), feeKind: draft.feeKind === 'juros' ? 'juros' : 'taxa' } : {}),
     // transferência entre contas suas: aparece no extrato, mas não conta como gasto nem ganho
     ...(draft.internal ? { internal: true } : {}),
     ...(draft.loanId ? { loanId: draft.loanId } : {}),
@@ -296,6 +298,7 @@ export function addTransactions(drafts, { futureInstallments = true } = {}) {
         ...(d.fitid ? { fitid: d.fitid } : {}),
         ...(d.last4 ? { last4: d.last4 } : {}),
         ...(d.firstDue && d.firstDue !== d.date ? { purchaseDate: d.date } : {}),
+        ...(d.type === 'expense' && !(d.installment?.n > 1) && d.fee > 0 ? { fee: round2(Math.min(d.fee, d.amount)), feeKind: d.feeKind === 'juros' ? 'juros' : 'taxa' } : {}),
         createdAt: Date.now(),
       };
       const amount = round2(d.amount);

@@ -21,8 +21,9 @@ import dividas from './views/dividas.js';
 import pix from './views/pix.js';
 import orcamentos from './views/orcamentos.js';
 import ajustes from './views/ajustes.js';
+import juros from './views/juros.js';
 
-const VIEWS = Object.fromEntries([inicio, extrato, relatorios, planejar, dicas, cofrinhos, dividas, pix, orcamentos, ajustes].map((v) => [v.id, v]));
+const VIEWS = Object.fromEntries([inicio, extrato, relatorios, planejar, dicas, cofrinhos, dividas, pix, orcamentos, ajustes, juros].map((v) => [v.id, v]));
 const TABS = [
   ['inicio', 'home', 'Início'],
   ['extrato', 'list', 'Extrato'],
@@ -30,7 +31,7 @@ const TABS = [
   ['relatorios', 'chart', 'Relatórios'],
   ['planejar', 'target', 'Planejar'],
 ];
-const TAB_OF = { dicas: 'planejar', cofrinhos: 'planejar', dividas: 'planejar', pix: 'planejar', orcamentos: 'planejar', ajustes: 'planejar' };
+const TAB_OF = { dicas: 'planejar', cofrinhos: 'planejar', dividas: 'planejar', pix: 'planejar', orcamentos: 'planejar', ajustes: 'planejar', juros: 'planejar' };
 
 const ui = { route: 'inicio', month: keyOf(new Date()), filter: 'all', query: '' };
 // telas abertas dentro do app desde que ele abriu: o voltar do Android percorre só estas

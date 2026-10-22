@@ -663,3 +663,20 @@ body.has-sheet #toasts { top: calc(var(--safe-area-inset-top, env(safe-area-inse
 .alerts .section-title { margin: 6px 0 8px; }
 .due-list .tx-main { flex: 1; min-width: 0; }
 .due-list .tx-main b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Juros e taxas */
+.juros-card { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; border: 0; color: inherit; font: inherit; cursor: pointer; }
+.juros-card .tx-main { flex: 1; min-width: 0; }
+.juros-card .tile-ic { width: 40px; height: 40px; }
+.save-card p { margin: 0 0 10px; }
+.save-tips { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.save-tips li { display: flex; gap: 10px; align-items: flex-start; }
+.save-tips li > span:last-child { min-width: 0; }
+.save-tips b { display: block; }
+.save-tips small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.fee-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+.fee-list li { border-bottom: 1px solid var(--line); }
+.fee-list li:last-child { border-bottom: 0; }
+.fee-row { width: 100%; display: flex; gap: 12px; align-items: center; padding: 10px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.fee-row .tx-main small.fee-math { white-space: normal; line-height: 1.4; margin-top: 2px; }
+.fee-row .fee-math b { display: inline; font-weight: 700; color: var(--text); white-space: nowrap; }

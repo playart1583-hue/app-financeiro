@@ -1,7 +1,8 @@
 import { addMonths, keyOf, monthSummary, projectMonth, projectNextMonths } from '../analytics.js';
 import { PAYMENT_METHODS, getCategory } from '../categories.js';
-import { columns, emptyState, hbars, html, money, monthName, pct, stackBar } from '../ui.js';
+import { columns, emptyState, hbars, html, icon, money, monthName, pct, stackBar } from '../ui.js';
 import { monthNav } from './extrato.js';
+import { interestOfMonth } from '../interest.js';
 
 export default {
   id: 'relatorios',
@@ -20,6 +21,7 @@ export default {
     const top = [...sum.txs].filter((t) => t.type === 'expense').sort((a, b) => b.amount - a.amount).slice(0, 5);
     const base = sum.income || sum.expense;
     const methods = Object.entries(sum.byMethod).sort((a, b) => b[1] - a[1]);
+    const juros = interestOfMonth(state, key);
 
     return html`
       <header class="page-head"><h1>Relatórios</h1></header>
@@ -52,6 +54,8 @@ export default {
             )
           : emptyState('Sem gastos neste mês', 'Os gastos aparecem aqui separados por categoria.')}
       </section>
+
+      <button type="button" class="card juros-card" data-go="juros"><span class="tile-ic">${icon('percent')}</span><span class="tx-main"><b>Juros e taxas</b><small>${juros.total > 0 ? `${pct(sum.expense ? juros.total / sum.expense : 0)} dos gastos do mês · por operação` : 'Nenhum juro ou taxa neste mês'}</small></span><b class="due-val ${juros.total > 0 ? 'expense' : ''}">${money(juros.total)}</b>${icon('chevR', 'muted')}</button>
 
       <section class="card"><h2 class="card-title">Classificação dos gastos</h2>
         ${sum.expense > 0

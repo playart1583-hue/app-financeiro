@@ -101,6 +101,7 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
       <input id="f-amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${moneyInput(v.amount)}" required>
     </label>
     ${editing?.installment ? html`<p class="hint">Parcela ${editing.installment.i} de ${editing.installment.n} · compra de ${money(editing.installment.cash, { force: true })}</p>` : ''}
+    <label class="field" id="f-fee-wrap" ${v.type === 'expense' && !v.internal && !editing?.installment ? '' : 'hidden'}><span>Juros e taxas incluídos no valor</span><input id="f-fee" name="fee" inputmode="decimal" autocomplete="off" placeholder="0,00 (se tiver)" value="${v.fee > 0 ? moneyInput(v.fee) : ''}"><small class="hint">Taxa de transação, tarifa, juros ou multa que já estão no valor acima. O valor todo continua nas suas contas; essa parte aparece também em Juros e taxas.</small></label>
     <p class="field-error" id="f-err" hidden></p>
     <label class="field"><span>Descrição</span><input id="f-desc" name="description" list="f-desc-list" autocomplete="off" placeholder="Ex.: Mercado, Uber, Salário" value="${v.description}"></label>
     <datalist id="f-desc-list">${knownDescriptions().map((d) => html`<option value="${d}"></option>`)}</datalist>
@@ -167,6 +168,8 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           $('#f-rec-wrap').hidden = n > 1;
           renderJuros(n, method);
         } else showDue(type, method, Boolean(editing?.installment));
+        const nNow = $('#f-inst-wrap') && !$('#f-inst-wrap').hidden ? +val('installments') || 1 : 1;
+        $('#f-fee-wrap').hidden = type !== 'expense' || nNow > 1 || Boolean(editing?.installment);
         $('#f-submit').textContent = editing ? 'Salvar alterações' : type === 'income' ? 'Salvar ganho' : type === 'transfer' ? 'Salvar transferência' : 'Salvar gasto';
       };
 
@@ -320,6 +323,9 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           merchant: val('merchant')?.trim() || '',
           location: val('location')?.trim() || '',
           internal,
+          // juros/taxa dentro do valor (só gasto à vista; no parcelado o juro sai das parcelas)
+          fee: !internal && type === 'expense' && n === 1 ? Math.min(readMoney(val('fee')) || 0, amount) : 0,
+          feeKind: v.feeKind || 'taxa',
         };
         if (editing) {
           const { amount: _a, ...rest } = draft;
@@ -385,6 +391,8 @@ export function prefillFromExtract(x) {
     firstDue: x.dueDate && x.dueDate > (x.date || '') ? x.dueDate : '',
     installments: x.installments || 1,
     installmentValue: x.installments > 1 && x.installmentValue && Math.abs(x.installmentValue * x.installments - x.amount) > 0.05 ? x.installmentValue : '',
+    fee: type === 'expense' && x.fee > 0 ? x.fee : '',
+    feeKind: x.feeKind || null,
   };
 }
 
@@ -398,7 +406,9 @@ const tidy = (s) =>
     .replace(/[*_]+/g, ' ')
     .trim()
     .toLowerCase()
-    .replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+    .replace(/(^|\s)\S/g, (c) => c.toUpperCase())
+    // siglas sem vogal continuam em maiúsculas: "BANCO CSF" -> "Banco CSF"
+    .replace(/(?<![\p{L}\d])[b-df-hj-np-tv-z]{3,4}(?![\p{L}\d])/giu, (w) => w.toUpperCase());
 
 /** Folha para enviar um print (ou colar o texto) de uma compra. `file`/`text` vêm do compartilhamento do celular. */
 export function openPrintSheet({ file, files, text } = {}) {
@@ -582,7 +592,7 @@ function purchaseMovement(d) {
   const n = d.installments > 1 ? d.installments : 1;
   const value = n > 1 ? d.installmentValue || (d.amount || 0) / n : d.amount || 0;
   const m = finishMovement({ date: d.date || toISO(new Date()), time: d.time || '', description: d.description || d.merchant || 'Compra', signed: d.type === 'income' ? value : -value, type: d.type || 'expense' });
-  return { ...m, amount: Math.round(m.amount * 100) / 100, category: d.category || m.category, method: d.method || (n > 1 ? 'credito' : null), card: d.card && (d.card.last4 || d.card.brand || d.card.bank) ? cardLabel(d.card) : '', last4: d.card?.last4 || findKnownLast4(d.rawText), installment: n > 1 ? { i: 1, n } : m.installment };
+  return { ...m, amount: Math.round(m.amount * 100) / 100, category: d.category || m.category, method: d.method || (n > 1 ? 'credito' : null), card: d.card && (d.card.last4 || d.card.brand || d.card.bank) ? cardLabel(d.card) : '', last4: d.card?.last4 || findKnownLast4(d.rawText), installment: n > 1 ? { i: 1, n } : m.installment, fee: n > 1 ? null : d.fee || null, feeKind: d.feeKind || null };
 }
 
 /** Registro rápido: interpreta o texto e salva na hora. */

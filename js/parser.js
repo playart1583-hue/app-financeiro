@@ -215,6 +215,8 @@ export function parseReceiptText(text, today = new Date()) {
       break;
     }
   }
+  // "Transferir para BANCO CSF", "Pago para Fulano"
+  if (!merchant) merchant = lines.map((l) => l.match(/^(?:transferir|transferido|enviado|pago|pagamento)\s+(?:para|a)\s*:?\s+(\S.{2,60})$/i)?.[1]).find(Boolean) || null;
   // "Para MATHEUS FREIRE DE SOUZA" (comprovante sem dois-pontos): nome em maiúsculas logo depois de "Para"
   if (!merchant) merchant = lines.map((l) => l.match(/^[Pp]ara\s+([A-ZÀ-Ü][A-ZÀ-Ü.' ]{3,60})$/)?.[1]).find((n) => n && n.trim().split(/\s+/).length >= 2) || null;
   let counterpartLabel = null;
@@ -272,6 +274,32 @@ export function parseReceiptText(text, today = new Date()) {
   if (cashPrice && installments > 1) amount = cashPrice;
   else if (installments > 1 && installmentValue && Math.abs(amount - installmentValue) < 0.01) amount = installmentValue * installments;
 
+  // taxa, tarifa, juros ou multa cobrados na operação ("Taxa de transação R$ 1,49"): o que vale é o total pago
+  // (valor da conta + taxas); a parte de taxa fica guardada à parte para a tela Juros e taxas
+  let fee = 0;
+  let feeKind = null;
+  if (installments <= 1 && !income) {
+    for (let k = 0; k < lines.length; k++) {
+      const n = normalize(lines[k]);
+      if (!/\b(taxas?|tarifas?|juros|multa|mora|encargos?|iof)\b/.test(n) || /desconto|sem juros|isent|gratis|zero|%|a\.?m\.?\b|ao mes|ao ano/.test(n)) continue;
+      let v = grab(lines[k]);
+      if (!(v > 0) && lines[k + 1] && /^\s*(r\$)?\s*[\d.,]+\s*$/i.test(lines[k + 1])) v = grab(lines[k + 1]);
+      if (!(v > 0)) continue;
+      fee += v;
+      feeKind = feeKind === 'juros' || /juros|multa|mora|encargo/.test(n) ? 'juros' : 'taxa';
+    }
+    fee = Math.round(fee * 100) / 100;
+    if (fee > 0) {
+      const baseLine = lines.find((l) => /\bvalor (da conta|do boleto|do documento|da fatura|original|principal|nominal|do pagamento|da transferencia|enviado)\b/.test(normalize(l)));
+      const base = baseLine ? grab(baseLine) : NaN;
+      const all = [...original.matchAll(/(\d{1,3}(?:\.\d{3})*,\d{2})/g)].map((x) => parseAmount(x[1]));
+      if (base > 0 && all.some((v) => Math.abs(v - (base + fee)) < 0.011)) amount = base + fee;
+      else if (base > 0 && Math.abs(amount - base) < 0.011) amount = base + fee;
+      if (!(amount > fee)) fee = 0;
+      amount = Math.round(amount * 100) / 100;
+    }
+  }
+
   return {
     type: income ? 'income' : 'expense',
     amount: amount > 0 ? amount : null,
@@ -285,6 +313,8 @@ export function parseReceiptText(text, today = new Date()) {
     installments,
     installmentValue,
     cashPrice,
+    fee: fee > 0 ? fee : null,
+    feeKind: fee > 0 ? feeKind : null,
     location: cityMatch ? cityMatch[1].trim() : null,
     category: category || null,
     app,

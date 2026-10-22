@@ -22,6 +22,7 @@ export function txRow(t, compact = false) {
     t.purchaseDate ? `compra ${t.purchaseDate.slice(8)}/${t.purchaseDate.slice(5, 7)}` : null,
     t.installment ? `${t.installment.i}/${t.installment.n}` : null,
     t.recurringId ? 'fixo' : null,
+    t.fee > 0 ? `${money(t.fee)} de ${t.feeKind === 'juros' ? 'juros' : 'taxa'}` : null,
     compact ? dayLabel(t.date, toISO(new Date())) : null,
   ].filter(Boolean);
   return html`<li><button type="button" class="tx" data-tx="${t.id}">

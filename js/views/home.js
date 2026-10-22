@@ -10,6 +10,7 @@ import { txRow } from './extrato.js';
 import { profileChip } from './perfis.js';
 import { bellButton } from './avisos.js';
 import { upcomingPayments } from '../reminders.js';
+import { interestOfMonth } from '../interest.js';
 import { insightCard } from './dicas.js';
 import { openPrintSheet, openTxForm, quickPreview, quickSave } from './form.js';
 import { openLoanContract } from './emprestimo.js';
@@ -25,6 +26,7 @@ export default {
     const fromNotifications = state.transactions.filter((t) => t.source === 'notificacao');
     const todayISO = toISO(today);
     const upcoming = upcomingPayments(state, today, 15);
+    const juros = interestOfMonth(state, key);
     const proj = projectMonth(state, today);
     const insights = buildInsights(state, today).slice(0, 3);
     const recent = state.transactions.filter((t) => t.date <= toISO(today)).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)).slice(0, 5);
@@ -100,6 +102,10 @@ export default {
           )}</ul>
           ${upcoming.length > 5 ? html`<p class="hint">E mais ${upcoming.length - 5} nos próximos 15 dias · total ${money(upcoming.reduce((s, x) => s + x.amount, 0))}</p>` : ''}
         </section>`
+      : ''}
+
+    ${juros.total > 0
+      ? html`<button type="button" class="card juros-card" data-go="juros"><span class="tile-ic">${icon('percent')}</span><span class="tx-main"><b>Juros e taxas do mês</b><small>${juros.items.length} ${juros.items.length > 1 ? 'operações' : 'operação'} neste mês</small></span><b class="due-val expense">${money(juros.total)}</b>${icon('chevR', 'muted')}</button>`
       : ''}
 
     <section class="card">

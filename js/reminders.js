@@ -37,6 +37,9 @@ export function upcomingPayments(state, today = new Date(), days = 45) {
       inv.amount += t.amount;
       inv.count += 1;
       invoices.set(key, inv);
+    } else if (t.date === from && !t.purchaseDate && !t.recurringId && !t.installment && t.method !== 'boleto') {
+      // gasto feito hoje (Pix, débito, dinheiro): já foi pago, não é vencimento
+      continue;
     } else out.push({ kind: t.method === 'boleto' ? 'boleto' : 'conta', date: t.date, amount: t.amount, title: t.method === 'boleto' ? `Boleto: ${t.description}` : t.description });
   }
   out.push(...invoices.values());

@@ -17,6 +17,7 @@ Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exempl
 | Relatórios mensais: categorias, regra 50/30/20, receitas × despesas em 6 meses, maiores gastos, formas de pagamento | Relatórios |
 | **Projeção de gastos**: fim do mês no ritmo atual, quanto pode gastar por dia, e os próximos 6 meses (parcelas, contas fixas, dívidas + média do dia a dia) | Início e Relatórios |
 | **Pix parcelado: quanto de juros** — calculado só com o preço à vista e a parcela que você informa (taxa ao mês, ao ano, juros em R$); simulação com outra taxa só se você digitar a taxa do banco | formulário e Planejar → Simulador |
+| **Juros e taxas**: quanto de cada operação foi juro, taxa, tarifa ou multa (taxa de transação lida no comprovante, parcelados com juros, parcelas de empréstimo, IOF e encargos), por mês e por tipo, com quanto daria para economizar. O valor inteiro continua nas suas contas; a parte de juros fica separada | Planejar → *Juros e taxas* · Início · Relatórios |
 | **Empréstimos e dívidas**: parcelados (calcula a taxa a partir da parcela), cartão rotativo/cheque especial, negativadas; pagar parcela, simular amortização | Planejar → Dívidas |
 | **Dívidas do Serasa**: importar por print ou texto do Serasa Limpa Nome, com oferta de desconto | Dívidas → *Importar do Serasa* |
 | **Plano para zerar dívidas**: compara *Nome limpo primeiro*, *Avalanche* (menos juros) e *Bola de neve*; mostra o mês em que cada dívida acaba | Dívidas |

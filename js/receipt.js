@@ -84,6 +84,8 @@ const purchaseGuide = () => `- "tipo": "gasto" ou "ganho" (ganho = dinheiro que 
 - "parcelas": número de parcelas (1 se à vista)
 - "valor_parcela": valor de cada parcela (número) ou null
 - "valor_a_vista": preço à vista quando o print mostra (útil para calcular juros), ou null
+- "taxas": soma de taxa de transação, tarifa, IOF, juros ou multa cobrados nesta operação (ex.: "Taxa de transação R$ 1,49"), ou null. Nesse caso "valor" é o total pago, já com as taxas (valor da conta + taxas). Desconto não conta; parcelado não usa este campo
+- "taxas_tipo": "juros" se for juros, multa, mora ou encargos; "taxa" se for taxa, tarifa ou IOF; null sem taxas
 - "local": cidade ou endereço, ou null
 - "categoria": um id de ${[...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].map((c) => c.id).join(', ')}
 - "classificacao": ${Object.keys(CLASSIFICATIONS).join(', ')} (essencial = necessidade básica, superfluo = desejo)
@@ -93,13 +95,13 @@ const purchaseGuide = () => `- "tipo": "gasto" ou "ganho" (ganho = dinheiro que 
 
 const purchasePrompt = (today) => `Você está lendo o print de uma compra, pagamento ou recebimento (notificação do banco, comprovante Pix, nota fiscal, recibo, tela de fatura ou SMS). Hoje é ${today}.
 Extraia os dados e devolva SOMENTE um objeto JSON com estes campos:
-${purchaseGuide()}Exemplo: {"tipo":"gasto","valor":152.3,"estabelecimento":"PADARIA DOCE PAO","descricao":"Padaria Doce Pão","data":"2026-10-17","hora":"14:32","forma_pagamento":"credito","cartao_final":"4321","cartao_bandeira":"Mastercard","banco":"Nubank","parcelas":3,"valor_parcela":50.77,"valor_a_vista":null,"local":null,"categoria":"restaurantes","classificacao":"superfluo","confianca":0.9,"observacao":null}`;
+${purchaseGuide()}Exemplo: {"tipo":"gasto","valor":152.3,"estabelecimento":"PADARIA DOCE PAO","descricao":"Padaria Doce Pão","data":"2026-10-17","hora":"14:32","forma_pagamento":"credito","cartao_final":"4321","cartao_bandeira":"Mastercard","banco":"Nubank","parcelas":3,"valor_parcela":50.77,"valor_a_vista":null,"taxas":null,"taxas_tipo":null,"local":null,"categoria":"restaurantes","classificacao":"superfluo","confianca":0.9,"observacao":null}`;
 
 const nullable = (type) => ({ type: [type, 'null'] });
 const PURCHASE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['tipo', 'valor', 'estabelecimento', 'descricao', 'data', 'hora', 'forma_pagamento', 'cartao_final', 'cartao_bandeira', 'banco', 'parcelas', 'valor_parcela', 'valor_a_vista', 'local', 'categoria', 'classificacao', 'confianca', 'observacao'],
+  required: ['tipo', 'valor', 'estabelecimento', 'descricao', 'data', 'hora', 'forma_pagamento', 'cartao_final', 'cartao_bandeira', 'banco', 'parcelas', 'valor_parcela', 'valor_a_vista', 'taxas', 'taxas_tipo', 'local', 'categoria', 'classificacao', 'confianca', 'observacao'],
   properties: {
     tipo: { type: 'string', enum: ['gasto', 'ganho'] },
     valor: nullable('number'),
@@ -114,6 +116,8 @@ const PURCHASE_SCHEMA = {
     parcelas: { type: 'integer' },
     valor_parcela: nullable('number'),
     valor_a_vista: nullable('number'),
+    taxas: nullable('number'),
+    taxas_tipo: { type: ['string', 'null'], enum: ['juros', 'taxa', null] },
     local: nullable('string'),
     categoria: { type: 'string', enum: [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].map((c) => c.id) },
     classificacao: { type: 'string', enum: Object.keys(CLASSIFICATIONS) },
@@ -144,6 +148,8 @@ export function normalizeClaudePurchase(j) {
     installments: n,
     installmentValue: +j.valor_parcela || null,
     cashPrice: cash,
+    fee: type === 'expense' && n === 1 && +j.taxas > 0 && +j.taxas < amount ? +j.taxas : null,
+    feeKind: j.taxas_tipo === 'juros' ? 'juros' : +j.taxas > 0 ? 'taxa' : null,
     location: j.local || null,
     category,
     classification: type === 'expense' ? (CLASSIFICATIONS[j.classificacao] ? j.classificacao : defaultClassification(category)) : null,
