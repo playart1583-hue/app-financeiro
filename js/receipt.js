@@ -85,6 +85,8 @@ const purchaseGuide = () => `- "tipo": "gasto" ou "ganho" (ganho = dinheiro que 
 - "valor_parcela": valor de cada parcela (número) ou null
 - "valor_a_vista": preço à vista quando o print mostra (útil para calcular juros), ou null
 - "taxas": soma de taxa de transação, tarifa, IOF, juros ou multa cobrados nesta operação (ex.: "Taxa de transação R$ 1,49"), ou null. Nesse caso "valor" é o total pago, já com as taxas (valor da conta + taxas). Desconto não conta; parcelado não usa este campo
+- Pix ou transferência com "Parcelamento N x R$ Y" ou "Parcelamento N" (99Pay, Mercado Pago, PicPay): forma_pagamento "pix_parcelado", parcelas N, valor_parcela Y (ou "Valor pago" ÷ N), "valor" = o valor enviado, sem a taxa; nesse caso a taxa de serviço é o juro do parcelamento e "taxas" fica null
+- A hora da barra de status do celular (canto de cima) não é parcela nem horário da compra; propaganda no fim do print ("Vincule sua chave Pix e ganhe...") não é parte da compra
 - "taxas_tipo": "juros" se for juros, multa, mora ou encargos; "taxa" se for taxa, tarifa ou IOF; null sem taxas
 - "local": cidade ou endereço, ou null
 - "categoria": um id de ${[...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].map((c) => c.id).join(', ')}

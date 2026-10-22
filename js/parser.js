@@ -75,19 +75,40 @@ export function findTime(text) {
 }
 
 function findInstallments(t) {
-  // "3x de R$ 50,00", "10x 89,90", "em 6 parcelas de 120,00", "parcela 2/10"
+  // "3x de R$ 50,00", "10x 89,90", "2xR$24,49", "em 6 parcelas de 120,00", "Parcelamento 2", "Nº de parcelas: 12"
   // o número e o "x" ficam na mesma linha e o número não é parte de hora ou data ("12:48" + o X de fechar não é 48x);
-  // a linha que fala de parcelamento vem primeiro
-  const NX = /(?<![\d:/.,])(\d{1,2})[ \t]*x(?![a-z])[ \t]*(?:de[ \t]*)?(?:r\$[ \t]*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?)?/;
+  // a linha que fala de parcelamento vem primeiro. "parcela 2/10" é a parcela atual, não o total
+  const NX = /(?<![\d:/.,])(\d{1,2})[ \t]*x(?![a-qs-z])[ \t]*(?:de[ \t]*)?(?:r\$[ \t]*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?)?/;
   const NP = /(?<![\d:/.,])(?:em[ \t]*)?(\d{1,2})[ \t]*parcelas?(?:[ \t]*(?:mensais|iguais))?(?:[ \t]*de[ \t]*(?:r\$[ \t]*)?(\d[\d.,]*))?/;
+  const NL = /parcel(?:amento|as)\b[^\d\n]{0,12}?(?<![\d:/.,])(\d{1,2})(?![\d.,/:])/;
   const lines = String(t).split('\n');
+  const ok = (n) => n > 0 && n <= 72;
   for (const l of [...lines.filter((x) => /parcel/.test(x)), ...lines]) {
     let m = l.match(NX);
-    if (m && +m[1] > 0 && +m[1] <= 72) return { n: +m[1], pmt: m[2] ? parseAmount(m[2]) : null };
+    if (m && ok(+m[1])) return { n: +m[1], pmt: m[2] ? parseAmount(m[2]) : null };
     m = l.match(NP);
-    if (m && +m[1] > 0) return { n: +m[1], pmt: m[2] ? parseAmount(m[2]) : null };
+    if (m && ok(+m[1])) return { n: +m[1], pmt: m[2] ? parseAmount(m[2]) : null };
+    m = l.match(NL);
+    if (m && ok(+m[1])) return { n: +m[1], pmt: null };
   }
   return null;
+}
+
+// Bloco de propaganda no fim do comprovante ("Quer mais benefícios? Vincule sua chave Pix e ganhe até R$ 5,00...")
+// confunde valor, forma de pagamento e categoria: sai antes de ler
+const AD_START = /quer mais beneficios|vincule sua chave|indique (?:e|um amigo)|convide (?:seus )?amigos|baixe o app|ganhe ate r?\$?/;
+const AD_LINE = /^(use seu cpf|vincular chave|ver meu comprovante|compartilhar comprovante|conclu[ií]do)\b/;
+export function stripAds(text) {
+  const out = [];
+  let ad = false;
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const n = normalize(line).trim();
+    if (AD_START.test(n)) ad = true;
+    else if (ad && /^(conclu|fechar|voltar|ok)\b/.test(n)) ad = false;
+    if (ad || AD_LINE.test(n)) continue;
+    out.push(line);
+  }
+  return out.join('\n');
 }
 
 /**
@@ -176,6 +197,25 @@ const STORES = [
   ['carrefour', 'Carrefour'], ['assai', 'Assaí'], ['atacadao', 'Atacadão'], ['ifood', 'iFood'], ['rappi', 'Rappi'], ['drogasil', 'Drogasil'], ['pague menos', 'Pague Menos'],
 ];
 
+/**
+ * "JC SERVICOS E APOIO ADMINISTRATIVOS LTDA" -> "JC Servicos e Apoio Administrativos"; "A&M 2BUSINESS LTDA" -> "A&M 2Business".
+ * Siglas (sem vogal ou com &) ficam em maiúsculas; LTDA, ME, S.A. saem.
+ */
+export function nameCase(s) {
+  return String(s || '')
+    .replace(/\b(ltda|me|eireli|s\.?\s?a\.?|epp)\b\.?/gi, '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w, k) => {
+      if (/&/.test(w) || (/^[A-Z]{2,4}$/.test(w) && !/[AEIOU]/.test(w))) return w.toUpperCase();
+      const low = w.toLowerCase();
+      if (k > 0 && ['de', 'da', 'do', 'dos', 'das', 'e'].includes(low)) return low;
+      return low.replace(/\p{L}/u, (c) => c.toUpperCase());
+    })
+    .join(' ');
+}
+
 const MERCHANT_LABEL = /^(?:estabelecimento|loja|local|comercio|favorecido|recebedor|destinatario|para|nome|beneficiario|empresa)(?:\s*[:\-]\s*(.+))?$/i;
 
 /**
@@ -183,7 +223,7 @@ const MERCHANT_LABEL = /^(?:estabelecimento|loja|local|comercio|favorecido|receb
  * Retorna campos com o que foi possível identificar (null quando não encontrado).
  */
 export function parseReceiptText(text, today = new Date()) {
-  const original = String(text || '');
+  const original = stripAds(text);
   const lines = original.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const t = normalize(original);
 
@@ -213,19 +253,28 @@ export function parseReceiptText(text, today = new Date()) {
   }
   if (/\ba vista\b/.test(t) && !inst) installments = 1;
 
-  // merchant
+  // destinatário / loja. Nome mascarado ("A&M ********* ****") não serve
+  const masked = (s) => /\*{2,}|•{2,}/.test(s || '');
+  // nome que quebrou em duas linhas ("JC SERVICOS E APOIO" / "ADMINISTRATIVOS LTDA")
+  const caps = (s) => /^[A-ZÀ-Ü0-9&.,'\- ]{3,}$/.test(s || '') && /[A-ZÀ-Ü]{3}/.test(s);
+  const withNext = (k, name) => (caps(name) && caps(lines[k + 1]) && !/\d{3}/.test(lines[k + 1]) ? `${name} ${lines[k + 1]}` : name);
   let merchant = null;
-  for (let k = 0; k < lines.length; k++) {
-    const m = normalize(lines[k]).match(MERCHANT_LABEL);
-    if (m) {
-      merchant = (m[1] ? lines[k].slice(lines[k].length - m[1].length) : lines[k + 1]) || null;
-      break;
-    }
+  // "Transferido para A&M 2BUSINESS LTDA", "Transferir para BANCO CSF", "Pago para Fulano", "Pix para Maria"
+  for (let k = 0; k < lines.length && !merchant; k++) {
+    const m = lines[k].match(/^(?:transferido|transferida|transferir|transfer[eê]ncia|enviado|enviada|pago|paga|pagamento|pix)\s+(?:para|a)\s*:?\s+(\S.{2,60})$/i);
+    if (m && !masked(m[1])) merchant = withNext(k, m[1]);
   }
-  // "Transferir para BANCO CSF", "Pago para Fulano"
-  if (!merchant) merchant = lines.map((l) => l.match(/^(?:transferir|transferido|enviado|pago|pagamento)\s+(?:para|a)\s*:?\s+(\S.{2,60})$/i)?.[1]).find(Boolean) || null;
-  // "Para MATHEUS FREIRE DE SOUZA" (comprovante sem dois-pontos): nome em maiúsculas logo depois de "Para"
-  if (!merchant) merchant = lines.map((l) => l.match(/^[Pp]ara\s+([A-ZÀ-Ü][A-ZÀ-Ü.' ]{3,60})$/)?.[1]).find((n) => n && n.trim().split(/\s+/).length >= 2) || null;
+  // "Para JC SERVICOS E APOIO" (comprovante sem dois-pontos): nome em maiúsculas logo depois de "Para"
+  for (let k = 0; k < lines.length && !merchant; k++) {
+    const m = lines[k].match(/^[Pp]ara\s+([A-ZÀ-Ü0-9&][A-ZÀ-Ü0-9&.,'\- ]{2,60})$/);
+    if (m && !masked(m[1]) && (m[1].trim().split(/\s+/).length >= 2 || m[1].trim().length >= 5)) merchant = withNext(k, m[1]);
+  }
+  for (let k = 0; k < lines.length && !merchant; k++) {
+    const m = normalize(lines[k]).match(MERCHANT_LABEL);
+    if (!m) continue;
+    const v = (m[1] ? lines[k].slice(lines[k].length - m[1].length) : lines[k + 1]) || null;
+    if (v && !masked(v)) merchant = v;
+  }
   let counterpartLabel = null;
   if (!merchant) {
     merchant = notificationCounterpart(original);
@@ -246,13 +295,20 @@ export function parseReceiptText(text, today = new Date()) {
       break;
     }
   }
+  // linha só com o nome da loja em maiúsculas ("PADARIA DOCE PAO", "MAGAZINE CENTRO")
+  if (!merchant) {
+    merchant =
+      lines.find(
+        (l) => caps(l) && !/r\$|\d{3}|\d{1,2}\/\d{1,2}/i.test(l) && !/^(valor|data|total|cartao|credito|debito|pix|comprovante|pagamento|compra|aprovad|transferencia|boleto|vencimento|beneficiario|cpf|cnpj|status|conclu)/.test(normalize(l)),
+      ) || null;
+  }
   if (merchant) merchant = merchant.replace(/\s{2,}/g, ' ').replace(/[*]+/g, ' ').trim();
 
   const cityMatch = original.match(/(?:cidade|local)\s*[:\-]\s*([^\n]+)/i);
   // carteiras digitais (Mercado Pago, 99Pay, PicPay) sem forma explícita: saiu do saldo, tratamos como Pix
   // Pix/transferência em parcelas ("Transferência concluída ... Parcelamento 4 x R$ 75,34"): Pix parcelado, mesmo
   // que o print também fale de Pix em outro lugar (anúncio de chave Pix etc.)
-  const pixInParts = inst && inst.n > 1 && /\b(pix|transferencia)\b/.test(t) && /parcelament|parcelad|transferencia (concluida|realizada|enviada|efetuada)|pix (enviado|realizado|efetuado)/.test(t);
+  const pixInParts = inst && inst.n > 1 && /\b(pix|transferencia|transferid[oa]|transferir)\b/.test(t) && /parcelament|parcelad|transferencia (concluida|realizada|enviada|efetuada)|transferid[oa] para|pix (enviado|realizado|efetuado)/.test(t);
   const method = (pixInParts ? 'pix_parcelado' : methodFrom(t)) || (inst && inst.n > 1 ? 'credito' : null) || (/mercado pago|99pay|99 pay|picpay|\b99\b/.test(t) ? 'pix' : null);
   const card = findCard(original);
   // vencimento (boleto, conta, fatura): fica à parte; a data do gasto é outra que apareça, ou hoje
@@ -260,7 +316,8 @@ export function parseReceiptText(text, today = new Date()) {
   const dueIdx = dueLine ? lines.indexOf(dueLine) : -1;
   const dueDate = dueLine ? findDate(dueLine, today) || findDate(lines[dueIdx + 1] || '', today) : null;
   const date = findDate(dueDate ? lines.filter((l, k) => k !== dueIdx && !(k === dueIdx + 1 && !findDate(dueLine, today))).join('\n') : original, today);
-  const time = findTime(original);
+  // horário da linha que tem a data (o primeiro do print costuma ser o relógio do celular)
+  const time = findTime(lines.filter((l) => /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)).join('\n')) || findTime(original);
   const income = flowDirection(t) === 'income';
   const app = findApp(t);
   if (!merchant && app === '99' && /corrida|viagem/.test(t)) merchant = 'Corrida 99';
@@ -268,7 +325,7 @@ export function parseReceiptText(text, today = new Date()) {
   let category = categorize(desc, income ? 'income' : 'expense') || categorize(original.replace(/sem juros/gi, ''), income ? 'income' : 'expense');
   // Pix parcelado: "Pix parcelado para Fulano"; sem outra pista, é um crédito que você paga em parcelas
   if (method === 'pix_parcelado' && !income) {
-    const who = merchant ? merchant.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()).replace(/ (De|Da|Do|Dos|Das|E) /g, (w) => w.toLowerCase()) : '';
+    const who = merchant ? nameCase(merchant) : '';
     counterpartLabel = who ? `Pix parcelado para ${who}` : `Pix parcelado${app ? ` ${app === '99' ? '99Pay' : app}` : ''}`;
     // categoria só pelo destinatário (o resto do print costuma ser anúncio: "Use seu CPF ou telefone"...)
     category = (merchant && categorize(merchant, 'expense')) || 'dividas';
@@ -285,7 +342,7 @@ export function parseReceiptText(text, today = new Date()) {
   // (valor da conta + taxas); a parte de taxa fica guardada à parte para a tela Juros e taxas
   let fee = 0;
   let feeKind = null;
-  if (installments <= 1 && !income) {
+  if (!income) {
     for (let k = 0; k < lines.length; k++) {
       const n = normalize(lines[k]);
       if (!/\b(taxas?|tarifas?|juros|multa|mora|encargos?|iof)\b/.test(n) || /desconto|sem juros|isent|gratis|zero|%|a\.?m\.?\b|ao mes|ao ano/.test(n)) continue;
@@ -296,12 +353,23 @@ export function parseReceiptText(text, today = new Date()) {
       feeKind = feeKind === 'juros' || /juros|multa|mora|encargo/.test(n) ? 'juros' : 'taxa';
     }
     fee = Math.round(fee * 100) / 100;
-    if (fee > 0) {
+    // total pago escrito no print ("Valor pago R$ 48,97", "Total pago", "Valor cobrado")
+    const paidLine = lines.find((l) => /\b(valor pago|total pago|valor total pago|valor cobrado|total cobrado|total a pagar)\b/.test(normalize(l)));
+    const paid = paidLine ? grab(paidLine) : NaN;
+    if (installments > 1) {
+      // parcelado: a taxa é o juro do parcelamento; o valor continua sendo o preço sem a taxa
+      const total = paid > amount ? paid : fee > 0 ? amount + fee : NaN;
+      if (!installmentValue && total > amount) installmentValue = Math.round((total / installments) * 100) / 100;
+      fee = 0;
+    } else if (fee > 0 && paid > 0 && Math.abs(paid - (amount + fee)) < 0.011) {
+      amount = paid;
+    } else if (fee > 0) {
       const baseLine = lines.find((l) => /\bvalor (da conta|do boleto|do documento|da fatura|original|principal|nominal|do pagamento|da transferencia|enviado)\b/.test(normalize(l)));
       const base = baseLine ? grab(baseLine) : NaN;
       const all = [...original.matchAll(/(\d{1,3}(?:\.\d{3})*,\d{2})/g)].map((x) => parseAmount(x[1]));
       if (base > 0 && all.some((v) => Math.abs(v - (base + fee)) < 0.011)) amount = base + fee;
       else if (base > 0 && Math.abs(amount - base) < 0.011) amount = base + fee;
+      else if (!(base > 0) && all.some((v) => Math.abs(v - (amount + fee)) < 0.011)) amount += fee;
       if (!(amount > fee)) fee = 0;
       amount = Math.round(amount * 100) / 100;
     }

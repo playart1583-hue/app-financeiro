@@ -438,7 +438,7 @@ export function openPrintSheet({ file, files, text } = {}) {
       // registra sozinho; só abre o formulário se faltar o valor, se parecer repetido ou se você desligou isso em Ajustes
       if (autoSave()) {
         const r = saveFromPrint(data);
-        if (r.saved) return announceSaved([r]);
+        if (r.saved || r.reason === 'repetido') return announceSaved([r]);
       }
       openTxForm({ prefill: prefillFromExtract(data), extracted: data, engine });
     },
@@ -492,18 +492,27 @@ export function saveFromPrint(data) {
 /** Aviso do que foi registrado, com Desfazer; o que não deu para salvar abre para você completar. */
 function announceSaved(results) {
   const ok = results.filter((r) => r.saved);
-  const left = results.filter((r) => !r.saved);
+  // repetido: o mesmo Pix em dois prints (resumo e comprovante) ou um print já mandado antes; não registra de novo
+  const dups = results.filter((r) => !r.saved && r.reason === 'repetido');
+  const left = results.filter((r) => !r.saved && r.reason !== 'repetido');
   const ids = ok.flatMap((r) => r.ids);
+  const dupText = dups.length ? ` · ${dups.length} print${dups.length > 1 ? 's' : ''} da mesma transação ignorado${dups.length > 1 ? 's' : ''}` : '';
   if (ok.length) {
     const d = ok[0].draft;
     const one = `${d.description} · ${money(d.amount, { force: true })}${d.installments > 1 ? ` em ${d.installments}x` : ''}${d.last4 ? ` · cartão ${d.last4}` : ''}${d.firstDue ? ` · vence ${dateBR(d.firstDue)}` : ''}`;
-    const unknown = ok.find((r) => r.draft.last4 && r.draft.method === 'credito' && !r.known);
-    const tip = '';
-    toast(`${ok.length === 1 ? `Registrado: ${one}` : `${ok.length} lançamentos registrados`}${left.length ? ` · ${left.length} não registrado${left.length > 1 ? 's' : ''}` : ''}.${tip}`, {
+    toast(`${ok.length === 1 ? `Registrado: ${one}` : `${ok.length} lançamentos registrados`}${dupText}${left.length ? ` · ${left.length} sem valor` : ''}.`, {
       action: 'Desfazer',
       onAction: () => ids.forEach((id) => deleteTransaction(id)),
-      timeout: tip ? 12000 : 8000,
+      timeout: 8000,
     });
+  } else if (dups.length && !left.length) {
+    const first = dups[0];
+    toast(dups.length > 1 ? 'Esses prints já estavam registrados.' : 'Esse print já estava registrado.', {
+      action: 'Registrar mesmo assim',
+      onAction: () => openTxForm({ prefill: prefillFromExtract(first.data), extracted: first.data, engine: { label: 'print (parece repetido)' } }),
+      timeout: 8000,
+    });
+    return;
   }
   // cartão lido no print sem fechamento/vencimento: pergunta agora e já leva a compra para o mês da fatura
   // (vários prints com cartões diferentes: pergunta de todos de uma vez)
@@ -511,9 +520,9 @@ function announceSaved(results) {
   // compras que podem ter sido no cartão mas o print não mostrou o final: pergunta qual foi
   const missing = ok.filter((r) => r.draft.type === 'expense' && !r.draft.last4 && (r.draft.method === 'credito' || !r.data.method || r.draft.installments > 1));
   if ((unknownCards.length || missing.length) && !left.length) return openCardCycle(unknownCards, missing);
-  // repetido ou sem valor: abre o primeiro para você decidir (os outros ficam no aviso)
+  // sem valor: abre o primeiro para você completar (os outros ficam no aviso)
   const first = left[0];
-  if (first) openTxForm({ prefill: prefillFromExtract(first.data), extracted: first.data, engine: { label: first.reason === 'repetido' ? 'print (parece repetido)' : 'print' } });
+  if (first) openTxForm({ prefill: prefillFromExtract(first.data), extracted: first.data, engine: { label: 'print' } });
   else if (!ok.length) toast('Não achei valores nesses prints.');
 }
 

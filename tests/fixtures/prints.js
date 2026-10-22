@@ -1,0 +1,17 @@
+// Texto real lido (OCR no aparelho) de prints que chegaram com erro, com nomes e documentos trocados.
+// Cada correção na leitura roda contra todos eles, para um conserto não quebrar outro caso.
+export default {
+  "99jc.jpg": "12:48 àt O E! GE\nx <\nTransferência concluída com sucesso\nrs 1,95\nPara JC SERVICOS E APOIO\n\nADMINISTRATIVOS LTDA\nValor original R$41,95\nParcelamento 2x R$23,91\nData 22/10/26 12:47:58\nVer meu comprovante\nQuer mais benefícios?\nVincule sua chave Pix e ganhe até\nR$5,00\nUse seu CPF ou telefone\nVincular chave Pix AF\nConcluído\n[1 O <\n",
+  "99parc.jpg": "17:58 99 & é Ni O Ru Em\n: ,\nTransferência concluída com sucesso\nrn$252,00\nPara FULANO DE TAL\nValor original R$252,00\nDesconto nas taxas R$1,01\nParcelamento 4 x R$75,34\nData 19/10/26 17:58:09\nVer meu comprovante\n\nQuer mais benefícios?\nVincule sua chave Pix e ganhe até\nR$5,00\nUse seu CPF ou telefone\nVincular chave Pix\nConcluído\n[1 o) <\n",
+  "am-99.jpg": "20:34 0%OS + xt 9 E: EEE\nx <\nTransferência concluída com sucesso\nns 2,96\nPara A&M 2BUSINESS LTDA\nValor original R$42,96\nParcelamento 2xR$24,49\nData 22/10/26 20:34:01\nVer meu comprovante\n\nQuer mais benefícios?\nVincule sua chave Pix e ganhe até\nR$5,00\nUse seu CPF ou telefone\nVincular chave Pix ls\nConcluído\n[1 O <\n",
+  "am-det.jpg": "20:35 EO. xt 9 E;! EEE\n< Detalhes da transação O)\nTransferido para A&M 2BUSINESS LTDA\nR$42,96\nConcluído\n\nDetalhes da transação\nCriado em 20:34:01 22/10/2026\nStatus da transação Concluído\nMétodo de pagamento Cartão\nTaxa de serviço R$6,01\nParcelamento 2\nValor pago R$48,97\n\nBeneficiário\nNome A&M Afedekokckmikck kkk\nNome da agência PAGSEGURO INTERNET\nINSTITUIÇÃO DE PAGAMENTO\nS.A.\n[1 O <\n",
+  "amazon.jpg": "251\nQ, Pesquisar na Amazon.com.br es\nResumo do pedido\nPedido realizado 14 de outubro de 2026\nNº do pedido 702-0981190-6733060\nSubtotal do(s) item(ns): R$ 218,00\nFrete e manuseio: R$ 0,00\nTotal: R$ 218,00\nTotal geral: R$ 218,00\nBaixar nota fiscal\nForma de pagamento\nVisa terminando em 2223\nEm 6x de R$ 36,35 sem juros\nExibir transações relacionadas >\nEnviar para\nFulano de Tal\nBag Creme de Leite Vegetal\nK FX |, NotcoNotcreme, 200g\nOE 47 AkAdi 1206\nNotCo TU\nCER R$ 549\n—\nnm f=) [= Ww =\nAA Conta Carteira Carrinho Explorar\n[1 O <\n",
+  "boleto.png": "Boleto bancário\n\nBeneficiário: ESCOLA ABC\nVencimento: 10/11/2026\n\nValor: R$ 350,00\n\nLinha digitável 23790.12345 60000\n",
+  "csf.jpg": "07:56 &s 1 o E! GE\n< <\nTransação concluída a\n\nPo\nR$31,49 SA\n\nDetalhes da transação\nTransferir para BANCO CSF\nData de pagamento 22/10/26 07:55:46\n\nValor da conta R$30,00\nTaxa de transação R$1,49\nObservação\nDetalhes do remetente\nInstituição 99Pay\nNome FULANO DE TAL\nDetalhes do destinatário\nInstituição Banco CSF S.A.\n",
+  "mc8238.png": "Pagamento aprovado\nMastercard 5502 **** *ik* 8238\nMAGAZINE CENTRO\n\nValor: R$ 150,00\n\n15/10/2026 18:20\n",
+  "p1.png": "Comprovante de Pix\nPix enviado\n\nValor: R$ 50,00\n\nPara: Maria Souza\nData: 17/10/2026 14:32\n",
+  "p2.png": "Compra aprovada\nCartão final 4321\nPADARIA DOCE PAO\nValor: R$ 23,90\n\nData: 16/10/2026 08:15\n",
+  "p3.png": "Compra aprovada\nMAGAZINE LOJA\n\n3x de R$ 100,00\n\nTotal: R$ 300,00\n\nData: 15/10/2026 19:40\n",
+  "p4.png": "Compra aprovada\nCartão 8238\n\nLOJA CENTRO\n\nValor: R$ 80,00\n\nData: 12/10/2026 10:05\n",
+  "semcartao.png": "Compra no crédito\nLOJA BAIRRO\nValor: R$ 120,00\n13/10/2026 12:10\n",
+};
