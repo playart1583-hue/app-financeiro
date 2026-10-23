@@ -9,6 +9,7 @@ export default {
   "boleto.png": "Boleto bancário\n\nBeneficiário: ESCOLA ABC\nVencimento: 10/11/2026\n\nValor: R$ 350,00\n\nLinha digitável 23790.12345 60000\n",
   "csf.jpg": "07:56 &s 1 o E! GE\n< <\nTransação concluída a\n\nPo\nR$31,49 SA\n\nDetalhes da transação\nTransferir para BANCO CSF\nData de pagamento 22/10/26 07:55:46\n\nValor da conta R$30,00\nTaxa de transação R$1,49\nObservação\nDetalhes do remetente\nInstituição 99Pay\nNome FULANO DE TAL\nDetalhes do destinatário\nInstituição Banco CSF S.A.\n",
   "mc8238.png": "Pagamento aprovado\nMastercard 5502 **** *ik* 8238\nMAGAZINE CENTRO\n\nValor: R$ 150,00\n\n15/10/2026 18:20\n",
+  "mp-pix.jpg": "07:40 E. nto Bol Q\n<\nE\n>\nR$ 5º -\nCiclano Pereira Da Silva\nPix enviado\n23/out - 07:39\nOQ Aprovado\nCompartilhar comprovante\nOrigem e destino\nSO Bradesco **** 2223\nvocÊ | Visa crédito\n& Pix\nnuzAllaeDasamentos - IP\nNd E. a do cartão\nNei -Eo\ne és tt < (O\n",
   "p1.png": "Comprovante de Pix\nPix enviado\n\nValor: R$ 50,00\n\nPara: Maria Souza\nData: 17/10/2026 14:32\n",
   "p2.png": "Compra aprovada\nCartão final 4321\nPADARIA DOCE PAO\nValor: R$ 23,90\n\nData: 16/10/2026 08:15\n",
   "p3.png": "Compra aprovada\nMAGAZINE LOJA\n\n3x de R$ 100,00\n\nTotal: R$ 300,00\n\nData: 15/10/2026 19:40\n",

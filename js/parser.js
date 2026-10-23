@@ -59,7 +59,8 @@ export function findDate(text, today = new Date()) {
     if (year < 100) year += 2000;
     if (day >= 1 && day <= 31 && mon >= 1 && mon <= 12) return `${year}-${pad(mon)}-${pad(day)}`;
   }
-  m = t.match(/\b(\d{1,2})\s*(?:de\s*)?(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?\s*(?:de\s*)?(\d{4})?/);
+  // "14 de outubro de 2026", "23 out", "23/out", "23-out-2026"
+  m = t.match(/\b(\d{1,2})\s*(?:de\s*|[/.-]\s*)?(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?\s*(?:de\s*|[/.-]\s*)?(\d{4})?/);
   if (m) {
     const mon = MONTHS.indexOf(m[2]) + 1;
     const year = m[3] ? +m[3] : today.getFullYear();
@@ -264,6 +265,12 @@ export function parseReceiptText(text, today = new Date()) {
     const m = lines[k].match(/^(?:transferido|transferida|transferir|transfer[eê]ncia|enviado|enviada|pago|paga|pagamento|pix)\s+(?:para|a)\s*:?\s+(\S.{2,60})$/i);
     if (m && !masked(m[1])) merchant = withNext(k, m[1]);
   }
+  // Mercado Pago, Nubank: o nome vem na linha de cima de "Pix enviado" / "Transferência enviada"
+  for (let k = 1; k < lines.length && !merchant; k++) {
+    if (!/^(pix|transferencia|ted|doc) (enviad|realizad|feit|recebid)/.test(normalize(lines[k]))) continue;
+    const name = lines[k - 1];
+    if (/^[\p{L}][\p{L}.' &-]{2,60}$/u.test(name) && name.trim().split(/\s+/).length >= 2 && !masked(name) && !/comprovante|\bpix\b|transfer|pagamento|aprovad|conclu|detalhes/.test(normalize(name))) merchant = name;
+  }
   // "Para JC SERVICOS E APOIO" (comprovante sem dois-pontos): nome em maiúsculas logo depois de "Para"
   for (let k = 0; k < lines.length && !merchant; k++) {
     const m = lines[k].match(/^[Pp]ara\s+([A-ZÀ-Ü0-9&][A-ZÀ-Ü0-9&.,'\- ]{2,60})$/);
@@ -317,12 +324,16 @@ export function parseReceiptText(text, today = new Date()) {
   const dueDate = dueLine ? findDate(dueLine, today) || findDate(lines[dueIdx + 1] || '', today) : null;
   const date = findDate(dueDate ? lines.filter((l, k) => k !== dueIdx && !(k === dueIdx + 1 && !findDate(dueLine, today))).join('\n') : original, today);
   // horário da linha que tem a data (o primeiro do print costuma ser o relógio do celular)
-  const time = findTime(lines.filter((l) => /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)).join('\n')) || findTime(original);
+  const time = findTime(lines.filter((l) => /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l) || findDate(l, today)).join('\n')) || findTime(original);
   const income = flowDirection(t) === 'income';
   const app = findApp(t);
   if (!merchant && app === '99' && /corrida|viagem/.test(t)) merchant = 'Corrida 99';
   const desc = merchant || lines[0] || '';
   let category = categorize(desc, income ? 'income' : 'expense') || categorize(original.replace(/sem juros/gi, ''), income ? 'income' : 'expense');
+  // Pix comum com o destinatário lido: "Pix para Jose Silva" / "Pix de Maria" (lojas conhecidas ficam só com o nome)
+  if (merchant && !counterpartLabel && method !== 'pix_parcelado' && /\bpix\b/.test(t) && !STORES.some(([, label]) => label === merchant)) {
+    counterpartLabel = `Pix ${income ? 'de' : 'para'} ${nameCase(merchant)}`;
+  }
   // Pix parcelado: "Pix parcelado para Fulano"; sem outra pista, é um crédito que você paga em parcelas
   if (method === 'pix_parcelado' && !income) {
     const who = merchant ? nameCase(merchant) : '';

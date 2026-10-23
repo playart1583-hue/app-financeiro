@@ -166,7 +166,7 @@ const NO_CLAUDE = ['not_granted', 'sampling_disabled', 'images_unavailable', 'ca
  * Lê uma imagem com o melhor motor disponível.
  * Retorna { json } quando o Claude leu, ou { text } quando foi OCR (o chamador interpreta o texto).
  */
-async function readImage(file, { prompt, schema, maxSide = 1600, signal, onStatus = () => {} }) {
+async function readImage(file, { prompt, schema, maxSide = 1600, signal, onStatus = () => {}, onOcr = null }) {
   const blob = await prepareImage(file, maxSide);
   const engine = await currentEngine();
   onStatus(`Lendo com ${engine.label}…`);
@@ -182,7 +182,7 @@ async function readImage(file, { prompt, schema, maxSide = 1600, signal, onStatu
   }
   if (getApiKey()) return { json: await callClaudeApi(blob, prompt, schema, signal), engine: { id: 'api', label: 'Claude API (sua chave)' } };
   onStatus('Lendo o texto da imagem no aparelho… (a primeira vez demora um pouco)');
-  return { text: await ocr(blob, onStatus), engine: { id: 'ocr', label: 'Leitura no aparelho (OCR)' } };
+  return { text: await ocr(blob, onStatus, onOcr), engine: { id: 'ocr', label: 'Leitura no aparelho (OCR)' } };
 }
 
 /**
@@ -190,8 +190,107 @@ async function readImage(file, { prompt, schema, maxSide = 1600, signal, onStatu
  * onStatus(texto) recebe o andamento para mostrar na tela.
  */
 export async function analyzePurchase(file, opts = {}) {
-  const r = await readImage(file, { ...opts, prompt: purchasePrompt(toISO(new Date())), schema: PURCHASE_SCHEMA });
-  return { data: r.json ? normalizeClaudePurchase(r.json) : { ...parseReceiptText(r.text), rawText: r.text }, engine: r.engine };
+  let cents = null;
+  // valor com centavos pequenos no alto ("R$ 5 ³²"): o OCR lê "R$ 5º"; uma segunda leitura recorta e lê as duas partes
+  const onOcr = async (worker, data, blob) => {
+    if (cutCents(data.text)) cents = await superscriptAmount(worker, blob, data).catch(() => null);
+  };
+  const r = await readImage(file, { ...opts, prompt: purchasePrompt(toISO(new Date())), schema: PURCHASE_SCHEMA, onOcr });
+  if (r.json) return { data: normalizeClaudePurchase(r.json), engine: r.engine };
+  const data = { ...parseReceiptText(r.text), rawText: r.text };
+  if (cents > 0 && (!(data.amount > 0) || Math.floor(data.amount) === Math.floor(cents))) data.amount = cents;
+  return { data, engine: r.engine };
+}
+
+// o primeiro "R$" do print vem sem centavos ("R$ 5º", "R$ 5 -", "R$ 1.234")
+const cutCents = (text) => {
+  const m = String(text || '').match(/r\s?\$\s*([\d.]+)([^\n]{0,4})/i);
+  return Boolean(m) && !/^,\d{2}/.test(m[2]);
+};
+
+/**
+ * Segunda leitura do valor principal: recorta a área à direita do maior "R$", separa as manchas escuras em
+ * números grandes (reais) e pequenos no alto (centavos) e lê cada grupo ampliado, só com dígitos.
+ */
+async function superscriptAmount(worker, blob, data) {
+  const words = (data.blocks || []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)));
+  const rs = words.filter((w) => /^r\s?\$|^rs$/i.test(w.text)).sort((a, b) => b.bbox.y1 - b.bbox.y0 - (a.bbox.y1 - a.bbox.y0))[0];
+  if (!rs) return null;
+  const h = rs.bbox.y1 - rs.bbox.y0;
+  const img = await createImageBitmap(blob);
+  // a palavra pode ter vindo grudada ("R$5º"): começa logo depois do "R$"
+  const x0 = /\d/.test(rs.text) ? rs.bbox.x0 + h * 0.9 : rs.bbox.x1;
+  const box = { x: Math.max(0, x0), y: Math.max(0, rs.bbox.y0 - h * 0.8), w: Math.min(img.width - x0, h * 8), h: h * 2.2 };
+  const k = 3;
+  const W = Math.round(box.w * k);
+  const H = Math.round(box.h * k);
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const g = canvas.getContext('2d', { willReadFrequently: true });
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, W, H);
+  g.drawImage(img, box.x, box.y, box.w, box.h, 0, 0, W, H);
+  // manchas escuras (componentes conectados)
+  const px = g.getImageData(0, 0, W, H).data;
+  const dark = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) dark[i] = 0.3 * px[i * 4] + 0.59 * px[i * 4 + 1] + 0.11 * px[i * 4 + 2] < 140 ? 1 : 0;
+  const seen = new Uint8Array(W * H);
+  const comps = [];
+  const stack = [];
+  for (let i = 0; i < W * H; i++) {
+    if (!dark[i] || seen[i]) continue;
+    let [minX, minY, maxX, maxY, n] = [W, H, 0, 0, 0];
+    seen[i] = 1;
+    stack.push(i);
+    while (stack.length) {
+      const j = stack.pop();
+      const x = j % W;
+      const y = (j - x) / W;
+      n++;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      for (const q of [j - 1, j + 1, j - W, j + W]) if (q >= 0 && q < W * H && dark[q] && !seen[q] && Math.abs((q % W) - x) <= 1) (seen[q] = 1), stack.push(q);
+    }
+    if (n > 20) comps.push({ x0: minX, y0: minY, x1: maxX, y1: maxY, h: maxY - minY + 1 });
+  }
+  if (!comps.length) return null;
+  comps.sort((a, b) => a.x0 - b.x0);
+  const top = Math.max(...comps.map((c) => c.h));
+  // reais: manchas altas seguidas, da esquerda para a direita (pontos de milhar são pequenos e não contam)
+  const big = [];
+  for (const c of comps) {
+    if (c.h < top * 0.7) continue;
+    if (big.length && c.x0 - big[big.length - 1].x1 > top * 0.6) break;
+    big.push(c);
+  }
+  if (!big.length) return null;
+  const bigTop = Math.min(...big.map((c) => c.y0));
+  const bigRight = Math.max(...big.map((c) => c.x1));
+  // centavos: manchas menores, alinhadas pelo alto, logo à direita
+  const small = comps.filter((c) => c.x0 >= bigRight - 2 && c.x0 - bigRight < top * 1.2 && c.h >= top * 0.25 && c.h < top * 0.7 && c.y0 < bigTop + top * 0.3);
+  if (!small.length) return null;
+  const read = async (group, targetH) => {
+    const u = { x0: Math.min(...group.map((c) => c.x0)), y0: Math.min(...group.map((c) => c.y0)), x1: Math.max(...group.map((c) => c.x1)), y1: Math.max(...group.map((c) => c.y1)) };
+    const pad = Math.round((u.y1 - u.y0) * 0.35);
+    const s = targetH / (u.y1 - u.y0 + 2 * pad);
+    const c = document.createElement('canvas');
+    c.width = Math.round((u.x1 - u.x0 + 2 * pad) * s);
+    c.height = targetH;
+    const cg = c.getContext('2d');
+    cg.fillStyle = '#fff';
+    cg.fillRect(0, 0, c.width, c.height);
+    cg.drawImage(canvas, u.x0 - pad, u.y0 - pad, u.x1 - u.x0 + 2 * pad, u.y1 - u.y0 + 2 * pad, 0, 0, c.width, c.height);
+    const out = await worker.recognize(c);
+    return (out.data.text || '').replace(/\D/g, '');
+  };
+  await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: '7' });
+  const reais = await read(big, 120);
+  const cents = await read(small, 120);
+  if (!/^\d{1,6}$/.test(reais) || !/^\d{2}$/.test(cents)) return null;
+  return +reais + +cents / 100;
 }
 
 // ---------- Contrato de empréstimo ----------
@@ -491,7 +590,7 @@ async function callClaudeApi(blob, prompt, schema, signal) {
 }
 
 let tesseractLoad = null;
-async function ocr(blob, onStatus) {
+async function ocr(blob, onStatus, onOcr = null) {
   if (!tesseractLoad) {
     tesseractLoad = new Promise((res, rej) => {
       if (window.Tesseract) return res(window.Tesseract);
@@ -510,7 +609,8 @@ async function ocr(blob, onStatus) {
     const worker = await T.createWorker('por', 1, {
       logger: (m) => m.status === 'recognizing text' && onStatus(`Lendo o texto… ${Math.round(m.progress * 100)}%`),
     });
-    const { data } = await worker.recognize(blob);
+    const { data } = await worker.recognize(blob, {}, onOcr ? { text: true, blocks: true } : undefined);
+    if (onOcr) await onOcr(worker, data, blob).catch(() => {});
     await worker.terminate();
     return data.text || '';
   } catch {
