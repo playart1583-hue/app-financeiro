@@ -2,7 +2,7 @@ import { currentBalance, goalSaved, keyOf, monthSummary, projectMonth } from '..
 import { getCategory } from '../categories.js';
 import { buildInsights } from '../insights.js';
 import { toISO } from '../parser.js';
-import { clearDemo, deleteTransactions, restoreTransactions, updateSettings } from '../store.js';
+import { clearDemo, deleteTransactions, loadDemo, restoreTransactions, updateSettings } from '../store.js';
 import { dayLabel, emptyState, hbars, html, icon, money, monthName, progress, toast } from '../ui.js';
 
 const MONTHS_SHORT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -60,6 +60,7 @@ export default {
       ? html`<section class="card start">
           <h2 class="card-title">${icon('spark')} Comece por aqui</h2>
           <p>Envie seus comprovantes, faturas e extratos: o app lê, separa gastos e ganhos e já calcula seu mês.</p>
+          <button type="button" class="btn ghost sm demo-link" data-act="demo">${icon('eye')} Ver com dados de exemplo</button>
           <div class="start-actions">
             <button type="button" class="tile" data-act="print"><span class="tile-ic">${icon('camera')}</span><span class="tile-main"><b>Ler print</b><small>Compra ou comprovante Pix</small></span></button>
             <button type="button" class="tile" data-act="invoice"><span class="tile-ic">${icon('card')}</span><span class="tile-main"><b>Importar fatura</b><small>PDF, DOCX, print, CSV ou OFX</small></span></button>
@@ -162,6 +163,7 @@ export default {
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (act === 'toggle-hide') updateSettings({ hideValues: !state.settings.hideValues });
       if (act === 'clear-demo') clearDemo();
+      if (act === 'demo') loadDemo(), toast('Dados de exemplo carregados');
       if (act === 'notif-keep') updateSettings({ notifCleanup: true });
       if (act === 'notif-del') {
         const removed = state.transactions.filter((t) => t.source === 'notificacao');

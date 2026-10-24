@@ -585,6 +585,7 @@ p.pill { white-space: normal; display: inline; line-height: 1.6; }
 .start p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
 .start-actions { display: grid; gap: 8px; }
 .start-actions .tile { box-shadow: none; background: var(--surface-2); padding: 12px; }
+.start .demo-link { margin: 0 0 12px; }
 
 .add-menu { display: grid; gap: 8px; padding-bottom: 6px; }
 .add-menu .tile { box-shadow: none; background: var(--surface-2); padding: 12px; }

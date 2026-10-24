@@ -9,10 +9,10 @@
 
 ## Curto prazo (próximos 3 meses) — base para outras pessoas usarem e contribuírem
 
-- [ ] Publicar o código no `main` e o app web no GitHub Pages (qualquer pessoa testa pelo navegador, sem instalar)
-- [ ] CI com testes em todo push e pull request (inclusive de forks) e relatório de cobertura
+- [x] Publicar o código no `main` e o app web no [GitHub Pages](https://playart1583-hue.github.io/app-financeiro/) (qualquer pessoa testa pelo navegador, sem instalar)
+- [x] CI com testes em todo push e pull request (inclusive de forks) e relatório de cobertura
 - [ ] Leitura de prints: ampliar a lista de prints reais anonimizados dos principais bancos e carteiras (Nubank, Itaú, Bradesco, Santander, Caixa, BB, Inter, Mercado Pago, PicPay, 99Pay, PagBank) — meta de 30 layouts com teste
-- [ ] Modelo de issue para "print lido errado" e guia de anonimização (feito no [CONTRIBUTING](CONTRIBUTING.md))
+- [x] Modelo de issue para "print lido errado" e guia de anonimização (no [CONTRIBUTING](CONTRIBUTING.md))
 - [ ] Testes das regras que hoje dependem do navegador (`js/store.js`: perfis, parcelas, vencimentos) com um `localStorage` simulado
 - [ ] Testes de ponta a ponta das telas principais com Playwright no CI
 
