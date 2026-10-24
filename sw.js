@@ -1,5 +1,5 @@
 // Cache simples para o app abrir sem internet depois da primeira visita.
-const CACHE = 'meubolso-v5';
+const CACHE = 'meubolso-v6';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './icons/icon.svg', './css/app.css',
   './js/analytics.js', './js/cards.js', './js/categories.js', './js/demo.js', './js/documents.js', './js/finance.js',
@@ -8,7 +8,7 @@ const ASSETS = [
   './js/ui.js', './js/views/adicionar.js', './js/views/ajustes.js', './js/views/arquivo.js', './js/views/avisos.js', './js/views/cofrinhos.js',
   './js/views/dicas.js', './js/views/dividas.js', './js/views/emprestimo.js', './js/views/extrato.js', './js/views/form.js', './js/views/home.js',
   './js/views/juros.js', './js/views/orcamentos.js', './js/views/perfis.js', './js/views/pix.js', './js/views/planejar.js', './js/views/reader.js',
-  './js/views/relatorios.js',
+  './js/views/relatorios.js', './packages/comprovantes-br/src/index.js',
 ];
 
 self.addEventListener('install', (e) => {

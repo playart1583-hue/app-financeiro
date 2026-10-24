@@ -19,7 +19,8 @@ Para o app Android é preciso JDK 21 e Android SDK (veja *App Android* no [READM
 
 | Pasta / arquivo | O que tem | Tem teste? |
 |---|---|---|
-| `js/parser.js` | leitura de texto: registro rápido, comprovantes, Serasa | sim, inclusive com texto real de prints (`tests/fixtures/prints.js`) |
+| `packages/comprovantes-br/` | leitura de comprovantes (pacote npm [`comprovantes-br`](packages/comprovantes-br/README.md), usado pelo app) | sim, com texto real de prints (`packages/comprovantes-br/test/fixtures/prints.js`) |
+| `js/parser.js` | registro rápido, notificações coladas, contratos, Serasa | sim |
 | `js/finance.js`, `js/analytics.js`, `js/interest.js` | cálculos: juros, Price, projeções, juros por operação | sim |
 | `js/importers.js`, `js/documents.js` | CSV, OFX, planilhas, PDF, faturas | sim |
 | `js/cards.js`, `js/transfers.js`, `js/insights.js` | ciclo do cartão, transferências entre contas, conselhos | parcial |
@@ -44,7 +45,7 @@ Se um comprovante foi lido errado (valor, parcelas, data, destinatário):
 
 1. Abra uma issue com o modelo **"Print lido errado"**, dizendo o banco/app e o que saiu errado.
 2. **Não anexe o print original.** Cole o texto lido (ou descreva o layout) trocando nomes, CPF, IDs de transação, endereço e números de conta por dados fictícios.
-3. Num PR, adicione o texto anonimizado em `tests/fixtures/prints.js` e o resultado esperado em `tests/prints.test.js`, junto com a correção em `js/parser.js`. Todos os prints da lista precisam continuar passando: é assim que uma correção não quebra outro banco.
+3. Num PR, adicione o texto anonimizado em `packages/comprovantes-br/test/fixtures/prints.js` e o resultado esperado em `packages/comprovantes-br/test/receipts.test.js`, junto com a correção em `packages/comprovantes-br/src/index.js`. Todos os prints da lista precisam continuar passando: é assim que uma correção não quebra outro banco.
 
 ## Dados pessoais e segurança
 

@@ -88,7 +88,7 @@ A leitura tenta, nesta ordem:
 
 1. **Claude dentro do app da Claude** (quando aberto como Artifact): usa a sua conta, sem chave.
 2. **Claude API com sua chave** (*Ajustes → Leitura de prints*): a chave fica só no aparelho. Usa o modelo `claude-opus-5-5` com saída estruturada (JSON validado).
-3. **OCR no aparelho** (Tesseract.js) + interpretação por regras em `js/parser.js`: funciona sem conta, com menos precisão.
+3. **OCR no aparelho** (Tesseract.js) + interpretação por regras no pacote [`comprovantes-br`](packages/comprovantes-br/README.md): funciona sem conta, com menos precisão.
 
 Também é possível colar o texto de um comprovante.
 
@@ -119,7 +119,8 @@ O Serasa não oferece uma API para apps pessoais consultarem o CPF: o acesso del
 index.html, manifest.webmanifest, sw.js   app instalável (PWA) com cache offline
 css/app.css                                visual (tokens de cor para claro/escuro)
 js/finance.js                              matemática: Price, taxa embutida, saldo devedor, plano de quitação
-js/parser.js                               registro rápido, comprovantes, lista do Serasa
+packages/comprovantes-br/                  leitor de comprovantes (pacote npm, usado pelo app)
+js/parser.js                               registro rápido, notificações, contratos, lista do Serasa
 js/categories.js                           categorias, palavras-chave, formas de pagamento
 js/analytics.js                            resumos, médias, projeções, dívidas
 js/insights.js                             sugestões automáticas
@@ -132,7 +133,7 @@ js/importers.js, js/documents.js           CSV, OFX, planilhas, PDF, DOCX, fatur
 js/store.js                                estado, persistência no aparelho e perfis
 js/views/*.js                              telas
 android/                                   app Android (Capacitor) e plugins Java
-tests/                                     testes (node --test); tests/fixtures/prints.js: texto real de prints, anonimizado
+tests/                                     testes do app (node --test)
 ```
 
 ## Contribuir

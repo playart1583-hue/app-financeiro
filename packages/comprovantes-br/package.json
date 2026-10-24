@@ -1,0 +1,49 @@
+{
+  "name": "comprovantes-br",
+  "version": "0.1.0",
+  "description": "Lê o texto de comprovantes brasileiros (Pix, Pix parcelado, cartão, boleto, transferência) e devolve valor, data, parcelas, taxas, cartão e destinatário.",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "pix",
+    "brasil",
+    "brazil",
+    "comprovante",
+    "receipt",
+    "parser",
+    "ocr",
+    "boleto",
+    "fintech",
+    "personal-finance"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/playart1583-hue/app-financeiro.git",
+    "directory": "packages/comprovantes-br"
+  },
+  "homepage": "https://github.com/playart1583-hue/app-financeiro/tree/main/packages/comprovantes-br#readme",
+  "bugs": {
+    "url": "https://github.com/playart1583-hue/app-financeiro/issues"
+  }
+}
