@@ -2,6 +2,7 @@
   "name": "meu-bolso",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "App de controle financeiro pessoal (PWA sem build e app Android via Capacitor).",
   "type": "module",
   "scripts": {

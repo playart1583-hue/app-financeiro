@@ -1,7 +1,14 @@
 # Meu Bolso — controle financeiro do dia a dia
 
-Protótipo de app de finanças pessoais (PWA, funciona no celular e pode ser instalado na tela inicial).
-Visual inspirado em apps como o iDinheiro: cabeçalho verde com saldo, atalhos redondos, cartões e barra inferior com botão **+**.
+App de finanças pessoais **em português, de código aberto e sem servidor**: os dados ficam no aparelho de quem usa. Funciona no navegador (PWA, instalável na tela inicial) e como app Android.
+
+Foi feito para a realidade brasileira: Pix e Pix parcelado, fatura do cartão com fechamento e vencimento, parcelas, boletos, dívidas do Serasa, comprovantes do Mercado Pago, Nubank, 99Pay e bancos. A ideia é registrar rápido (por print, arquivo ou texto) e mostrar para onde vai o dinheiro, quanto vai para juros e taxas e o que pagar primeiro.
+
+> **Estágio:** pré-1.0, em uso diário pelo autor. Veja o que vem a seguir no [ROADMAP](ROADMAP.md) e como ajudar no [CONTRIBUTING](CONTRIBUTING.md). Licença [MIT](LICENSE).
+
+**Tecnologia:** JavaScript em módulos ES, sem framework e sem etapa de build · Android com [Capacitor](https://capacitorjs.com) 8 (plugins próprios em Java para compartilhar arquivos e bloqueio por digital) · OCR no aparelho com [Tesseract.js](https://tesseract.projectnaptha.com) · leitura opcional com a API do Claude (chave do próprio usuário) · testes com o runner nativo do Node (`node --test`) · APK assinado gerado pelo GitHub Actions.
+
+**Privacidade:** não há conta, servidor próprio nem rastreamento. Lançamentos, cartões e dívidas ficam no armazenamento local do aparelho; o backup é um arquivo que você exporta. Seus dados só saem do aparelho se você cadastrar uma chave da API do Claude (o print vai para a leitura) ou abrir o app dentro do app da Claude (sincroniza com uma pasta privada da sua conta). Na primeira vez que são usadas, as bibliotecas de leitura (OCR, PDF, planilhas) são baixadas de CDN; os seus arquivos continuam no aparelho.
 
 Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exemplos* você começa do zero.
 
@@ -116,10 +123,24 @@ js/parser.js                               registro rápido, comprovantes, lista
 js/categories.js                           categorias, palavras-chave, formas de pagamento
 js/analytics.js                            resumos, médias, projeções, dívidas
 js/insights.js                             sugestões automáticas
-js/receipt.js                              leitura de imagem (Claude / API / OCR)
-js/store.js                                estado, persistência e sincronização
+js/receipt.js                              leitura de imagem (Claude / API / OCR) e segunda leitura de centavos
+js/interest.js                             juros e taxas por operação
+js/cards.js                                cartões: fechamento, vencimento, mês da fatura
+js/transfers.js                            transferências entre contas próprias
+js/reminders.js                            lembretes de pagamento (Android)
+js/importers.js, js/documents.js           CSV, OFX, planilhas, PDF, DOCX, faturas
+js/store.js                                estado, persistência no aparelho e perfis
 js/views/*.js                              telas
-tests/                                     testes (node --test)
+android/                                   app Android (Capacitor) e plugins Java
+tests/                                     testes (node --test); tests/fixtures/prints.js: texto real de prints, anonimizado
 ```
+
+## Contribuir
+
+Contribuições são bem-vindas, principalmente prints de bancos que o app ainda lê errado (com os dados trocados). O passo a passo está no [CONTRIBUTING](CONTRIBUTING.md); os próximos passos do projeto, no [ROADMAP](ROADMAP.md).
+
+## Licença
+
+[MIT](LICENSE).
 
 Os cálculos usam só os números que você informa: o app não supõe taxas de juros (cada banco tem a sua) nem simula valor de quitação antecipada — esse valor só o credor informa. Não substituem orientação financeira profissional.

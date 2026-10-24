@@ -1,0 +1,20 @@
+# Testes em todo push e pull request (inclusive de forks): não precisa de nenhum secret.
+name: Testes
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Testes com cobertura
+        run: node --test --experimental-test-coverage --test-coverage-exclude='tests/**' tests/*.test.js
