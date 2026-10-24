@@ -10,7 +10,7 @@ Foi feito para a realidade brasileira: Pix e Pix parcelado, fatura do cartão co
 
 **Privacidade:** não há conta, servidor próprio nem rastreamento. Lançamentos, cartões e dívidas ficam no armazenamento local do aparelho; o backup é um arquivo que você exporta. Seus dados só saem do aparelho se você cadastrar uma chave da API do Claude (o print vai para a leitura) ou abrir o app dentro do app da Claude (sincroniza com uma pasta privada da sua conta). Na primeira vez que são usadas, as bibliotecas de leitura (OCR, PDF, planilhas) são baixadas de CDN; os seus arquivos continuam no aparelho.
 
-Abre com **dados de exemplo** para você explorar. Em *Início → Apagar exemplos* você começa do zero.
+**Experimente no navegador:** https://playart1583-hue.github.io/app-financeiro/ — abre vazio; toque em *Ver com dados de exemplo* no Início para explorar com lançamentos, cartões, dívidas e cofrinhos de exemplo (saem em *Apagar exemplos* ou quando o app é reaberto). Os dados ficam só no seu navegador.
 
 ## O que tem
 
@@ -74,7 +74,7 @@ npm start            # ou: python3 -m http.server 8080
 # abra http://localhost:8080
 ```
 
-No celular, abra o endereço e use *Adicionar à tela inicial*. Para publicar de graça, ative o GitHub Pages neste repositório (branch e pasta raiz).
+No celular, abra o endereço e use *Adicionar à tela inicial*. A versão publicada fica no GitHub Pages deste repositório (branch `main`, pasta raiz): https://playart1583-hue.github.io/app-financeiro/
 
 Testes dos cálculos e dos leitores de texto:
 
