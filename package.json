@@ -1,0 +1,23 @@
+{
+  "name": "meu-bolso",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "App de controle financeiro pessoal (PWA sem build e app Android via Capacitor).",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test tests/*.test.js",
+    "build:web": "node scripts/build-web.mjs",
+    "android:sync": "npm run build:web && npx cap sync android",
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/local-notifications": "8.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2"
+  }
+}

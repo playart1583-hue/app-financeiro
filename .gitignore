@@ -1,0 +1,13 @@
+node_modules/
+.DS_Store
+www/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/src/main/assets/public/
+android/capacitor-cordova-android-plugins/
+*.apk
+!dist/*.apk
+android/keystore/meubolso.jks
+android/keystore/keystore.properties

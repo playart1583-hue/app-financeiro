@@ -1,0 +1,60 @@
+{
+  "name": "Meu Bolso — controle financeiro",
+  "short_name": "Meu Bolso",
+  "description": "Gastos, ganhos, relatórios, cofrinhos, dívidas e leitura de prints de compras.",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f1f5f2",
+  "theme_color": "#0a8c50",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "share_target": {
+    "action": "./compartilhar",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "files",
+          "accept": [
+            "image/*",
+            "application/pdf",
+            ".pdf",
+            "text/csv",
+            ".csv",
+            "text/plain",
+            ".txt",
+            ".ofx",
+            "application/x-ofx",
+            ".xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".xls",
+            "application/json",
+            ".json"
+          ]
+        }
+      ]
+    }
+  },
+  "shortcuts": [
+    {
+      "name": "Ler print",
+      "url": "./#inicio"
+    },
+    {
+      "name": "Extrato",
+      "url": "./#extrato"
+    }
+  ]
+}

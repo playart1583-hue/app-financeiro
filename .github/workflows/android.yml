@@ -1,0 +1,75 @@
+# Gera o APK do Meu Bolso no GitHub.
+# - A cada push nas branches abaixo, ou manualmente em Actions > "APK Android" > Run workflow.
+# - O APK aparece em Releases (pronto para baixar no celular) e também em Artifacts da execução.
+name: APK Android
+
+on:
+  push:
+    branches: [main, ccr-2b28733f-3fo937]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # o Android SDK já vem instalado na máquina do GitHub; só garante a plataforma e as build-tools do projeto
+      - name: Android SDK
+        run: |
+          SDKM=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-36" "build-tools;35.0.0" "platform-tools" > /dev/null
+      - run: npm ci
+      - run: npm test
+      - run: npm run android:sync
+      - name: Abrir a chave de assinatura
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Falta o secret ANDROID_KEYSTORE_PASSWORD (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in android/keystore/meubolso.jks.enc -out android/keystore/meubolso.jks -pass env:ANDROID_KEYSTORE_PASSWORD
+      - run: ./gradlew assembleRelease --no-daemon
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      - name: Nome dos arquivos com a versão
+        id: apk
+        run: |
+          VERSION=$(grep -oP 'versionName "\K[^"]+' android/app/build.gradle)
+          cp android/app/build/outputs/apk/release/app-release.apk "meu-bolso-$VERSION.apk"
+          echo "file=meu-bolso-$VERSION.apk" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meu-bolso-apk
+          path: ${{ steps.apk.outputs.file }}
+      - name: Conferir assinatura
+        run: |
+          SIGNER=$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner
+          $SIGNER verify --print-certs "${{ steps.apk.outputs.file }}"
+      - name: Publicar em Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-v${{ steps.apk.outputs.version }}-${{ github.run_number }}
+          name: Meu Bolso ${{ steps.apk.outputs.version }} (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          files: ${{ steps.apk.outputs.file }}
+          make_latest: true
+          body: |
+            **Baixe o `${{ steps.apk.outputs.file }}`** no celular, abra e permita instalar apps desta fonte.
+            Os lançamentos entram pelo formulário, por print, por documento (PDF, DOCX, CSV, OFX, planilhas) ou por texto colado.
+
+            Gerado a partir de ${{ github.ref_name }} (${{ github.sha }}).
