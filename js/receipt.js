@@ -4,9 +4,8 @@ import { parseLoanText, parseReceiptText, parseSerasaText, toISO } from './parse
 import { parseStatementText } from './importers.js';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, CLASSIFICATIONS, categorize, defaultClassification } from './categories.js';
 import { getApiKey } from './store.js';
+import { loadAnthropic, loadTesseract } from './libs.js';
 
-const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.131.0/+esm';
-const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
 const MODEL = 'claude-opus-5-5';
 const METHODS = ['pix', 'debito', 'credito', 'pix_parcelado', 'dinheiro', 'boleto', 'transferencia', 'nao_identificado'];
 
@@ -554,7 +553,7 @@ function sampleErrorText(e) {
 
 /** Chama a API com uma imagem (blob) ou só texto (blob null). */
 async function callClaudeApi(blob, prompt, schema, signal) {
-  const { default: Anthropic } = await import(SDK_URL);
+  const Anthropic = await loadAnthropic();
   const client = new Anthropic({ apiKey: getApiKey(), dangerouslyAllowBrowser: true });
   const data = blob ? await blobToBase64(blob) : null;
   let res;
@@ -589,22 +588,8 @@ async function callClaudeApi(blob, prompt, schema, signal) {
   return JSON.parse(text);
 }
 
-let tesseractLoad = null;
 async function ocr(blob, onStatus, onOcr = null) {
-  if (!tesseractLoad) {
-    tesseractLoad = new Promise((res, rej) => {
-      if (window.Tesseract) return res(window.Tesseract);
-      const s = document.createElement('script');
-      s.src = TESSERACT_URL;
-      s.onload = () => res(window.Tesseract);
-      s.onerror = () => {
-        tesseractLoad = null;
-        rej(new Error('Não deu para carregar o leitor de imagem. Cole o texto do comprovante ou configure a chave do Claude em Ajustes.'));
-      };
-      document.head.append(s);
-    });
-  }
-  const T = await tesseractLoad;
+  const T = await loadTesseract();
   try {
     const worker = await T.createWorker('por', 1, {
       logger: (m) => m.status === 'recognizing text' && onStatus(`Lendo o texto… ${Math.round(m.progress * 100)}%`),

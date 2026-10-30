@@ -51,6 +51,7 @@ Se um comprovante foi lido errado (valor, parcelas, data, destinatário):
 
 - Nunca faça commit de dados reais: nomes, CPF, prints, extratos, backups (`.json` exportado), chaves de API ou a chave de assinatura (`android/keystore/meubolso.jks`, `keystore.properties`, que estão no `.gitignore`).
 - O app não envia dados para servidor nenhum. A única saída de rede opcional é a leitura de prints pela API do Claude, com a chave do próprio usuário. Mudanças que enviem dados para fora precisam ser discutidas numa issue antes.
+- Bibliotecas de CDN ficam todas em `js/libs.js`, com versão fixa e hash de integridade (SRI) quando são `<script>` comuns. A `Content-Security-Policy` do `index.html` só libera esses hosts, bloqueia `eval` e não deixa a página mandar dados nem carregar imagens de outros sites. Para trocar ou adicionar uma biblioteca, mexa nos dois lugares; `tests/security.test.js` confere.
 - Encontrou uma falha de segurança? Não abra issue pública: escreva para o mantenedor pelo e-mail do perfil do GitHub.
 
 ## Issues e pull requests
