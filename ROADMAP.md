@@ -11,6 +11,8 @@
 
 - [x] Publicar o código no `main` e o app web no [GitHub Pages](https://playart1583-hue.github.io/app-financeiro/) (qualquer pessoa testa pelo navegador, sem instalar)
 - [x] CI com testes em todo push e pull request (inclusive de forks) e relatório de cobertura
+- [x] Leitor de comprovantes separado no pacote [`comprovantes-br`](packages/comprovantes-br/README.md), para outros projetos usarem
+- [ ] Publicar `comprovantes-br` no npm
 - [ ] Leitura de prints: ampliar a lista de prints reais anonimizados dos principais bancos e carteiras (Nubank, Itaú, Bradesco, Santander, Caixa, BB, Inter, Mercado Pago, PicPay, 99Pay, PagBank) — meta de 30 layouts com teste
 - [x] Modelo de issue para "print lido errado" e guia de anonimização (no [CONTRIBUTING](CONTRIBUTING.md))
 - [ ] Testes das regras que hoje dependem do navegador (`js/store.js`: perfis, parcelas, vencimentos) com um `localStorage` simulado

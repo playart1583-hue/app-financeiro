@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 8080",
-    "test": "node --test tests/*.test.js",
+    "test": "node --test tests/*.test.js packages/comprovantes-br/test/*.test.js",
     "build:web": "node scripts/build-web.mjs",
     "android:sync": "npm run build:web && npx cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleRelease"

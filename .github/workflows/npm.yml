@@ -1,0 +1,35 @@
+# Publica o pacote comprovantes-br no npm quando uma tag comprovantes-br-vX.Y.Z é enviada.
+# Precisa do secret NPM_TOKEN (token "Automation" ou "Granular" do npmjs.com com permissão de publicar).
+name: Publicar comprovantes-br
+
+on:
+  push:
+    tags: ['comprovantes-br-v*']
+
+permissions:
+  contents: read
+  id-token: write # selo de procedência (provenance) no npm
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/comprovantes-br
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+      - name: A tag bate com a versão do package.json
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_NAME}" != "comprovantes-br-v${VERSION}" ]; then
+            echo "::error::A tag ${GITHUB_REF_NAME} não bate com a versão ${VERSION} do package.json."
+            exit 1
+          fi
+      - run: npm test
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

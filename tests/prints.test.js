@@ -1,7 +1,7 @@
 // Leitura de prints reais: valor, forma de pagamento, parcelas, taxa, destinatário e data de cada um.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import PRINTS from './fixtures/prints.js';
+import PRINTS from '../packages/comprovantes-br/test/fixtures/prints.js';
 
 const today = new Date(2026, 9, 22);
 // [valor, forma, parcelas, valor da parcela, taxa, descrição, data, final do cartão]
