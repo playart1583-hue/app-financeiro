@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- O que a página pode carregar e para onde pode mandar dados. Bibliotecas novas entram em js/libs.js e aqui. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https://api.anthropic.com https://cdn.jsdelivr.net blob: data:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'none'; form-action 'self'">
 <title>Meu Bolso</title>
 <meta name="description" content="Controle financeiro do dia a dia: gastos, ganhos, relatórios, projeções, cofrinhos, dívidas e leitura de prints de compras.">
 <meta name="theme-color" content="#0a8c50">

@@ -8,30 +8,10 @@ import { addTransactions, deleteTransactions, findDuplicate, mergeBackup, replac
 import { dateBR, esc, html, icon, money, openSheet, toast } from '../ui.js';
 import { cardInfo, cardText, dueFor, findKnownLast4, knownLast4, rememberCard } from '../cards.js';
 import { addMonthsISO } from '../analytics.js';
+import { loadPdfjs, loadXlsx } from '../libs.js';
 
-const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const ACCEPT = '.csv,.tsv,.txt,.ofx,.qfx,.xlsx,.xls,.ods,.json,.pdf,.docx,.odt,.rtf,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text,image/png,image/jpeg,image/webp';
 const MAX_ROWS = 400;
-
-const scripts = {};
-function loadScript(url, global) {
-  if (window[global]) return Promise.resolve(window[global]);
-  scripts[url] =
-    scripts[url] ||
-    new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = url;
-      s.onload = () => res(window[global]);
-      s.onerror = () => {
-        delete scripts[url];
-        rej(new Error('Não deu para carregar o leitor desse tipo de arquivo. Verifique a internet ou exporte em CSV.'));
-      };
-      document.head.append(s);
-    });
-  return scripts[url];
-}
 
 /** Bancos brasileiros ainda exportam em Windows-1252: tenta UTF-8 e cai para ele se vier lixo. */
 async function readText(file) {
@@ -44,7 +24,7 @@ async function readText(file) {
 }
 
 async function readSpreadsheet(file) {
-  const XLSX = await loadScript(XLSX_URL, 'XLSX');
+  const XLSX = await loadXlsx();
   const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
   // a aba com mais linhas costuma ser a de lançamentos
   const sheets = wb.SheetNames.map((n) => XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }));
@@ -55,8 +35,7 @@ async function readSpreadsheet(file) {
 
 /** Texto de PDF reconstruído linha a linha (itens agrupados pela altura na página). */
 async function readPdfText(file) {
-  const pdfjs = await loadScript(PDFJS_URL, 'pdfjsLib');
-  pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+  const pdfjs = await loadPdfjs();
   const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
   const out = [];
   for (let p = 1; p <= doc.numPages; p++) {
@@ -77,8 +56,7 @@ async function readPdfText(file) {
 
 /** Páginas de um PDF escaneado como imagens (até 8 páginas). */
 async function readPdfImages(file, maxPages = 8) {
-  const pdfjs = await loadScript(PDFJS_URL, 'pdfjsLib');
-  pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+  const pdfjs = await loadPdfjs();
   const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
   const out = [];
   for (let p = 1; p <= Math.min(doc.numPages, maxPages); p++) {
