@@ -51,6 +51,7 @@ parseReceipt(texto);
   cashPrice: 42.96,
   fee: null,
   feeKind: null,
+  transactionId: null,
   location: null,
   category: null,
   app: null
@@ -97,6 +98,8 @@ Os tipos TypeScript vêm junto (`index.d.ts`).
 - **Taxas:** taxa de transação, tarifa, IOF (`feeKind: 'taxa'`); juros, multa, mora e encargos (`feeKind: 'juros'`). "Sem juros", desconto e taxa em % não contam como cobrança.
 - **Cartão:** `final 8238`, `terminando em 8238`, `**** 8238`, número mascarado inteiro, `Cartão: 8238`, `Visa 8238`, banco e bandeira.
 - **Destinatário:** `Para NOME`, `Transferido para NOME` (juntando nome quebrado em duas linhas), nome acima de "Pix enviado" (Mercado Pago, Nubank), loja numa linha em maiúsculas; ignora nomes mascarados (`A&M ****`).
+- **Número da transação:** `N.º da transação`, `ID da transação`, autenticação, NSU (`transactionId`), para reconhecer o mesmo pagamento em prints diferentes.
+- **Gasto ou ganho:** "Pix recebido", "você recebeu" contra "Pix enviado", "pagamento de conta"; o prazo "vai ser creditado em até 2 dias úteis" (de quem recebe) não vira ganho.
 - **Datas:** `22/10/2026`, `22/10/26`, `14 de outubro de 2026`, `23/out`, `hoje`, `ontem`; vencimento de boleto separado da data do pagamento.
 
 ## Limites

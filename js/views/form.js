@@ -5,7 +5,7 @@ import { markOwnTransfer } from '../transfers.js';
 import { alignCreditToDue, cardInfo, cardText, cycleText, dueFor, findKnownLast4, knownLast4, rememberCard, saveCard, splitCard, undoAlign } from '../cards.js';
 import { CLASSIFICATIONS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS, categorize, defaultClassification, getCategory } from '../categories.js';
 import { analyzeInstallments } from '../finance.js';
-import { cardLabel, parseQuickEntry, parseReceiptText, toISO } from '../parser.js';
+import { cardLabel, nameCase, parseQuickEntry, parseReceiptText, toISO } from '../parser.js';
 import { analyzePurchase } from '../receipt.js';
 import { openReader } from './reader.js';
 import { openFileImport, reviewMovements } from './arquivo.js';
@@ -84,8 +84,10 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
   if (v.last4 && !v.bank) v.bank = cardInfo(v.last4)?.bank || '';
   if (!v.classification && v.type === 'expense') v.classification = defaultClassification(v.category);
   let userPickedCategory = Boolean(prefill.category || editing);
-  const dupTx = !editing && extracted && v.amount ? findDuplicate({ type: v.type, amount: +v.amount, date: v.date, time: v.time }) : null;
+  const dupTx = !editing && extracted && v.amount ? findDuplicate({ type: v.type, amount: +v.amount, date: v.date, time: v.time, txid: v.txid }) : null;
   const group = editing && (editing.installment || editing.recurringId);
+  // gasto à vista já lançado também pode ser dividido em parcelas ao editar
+  const canSplit = !editing || !group;
 
   const body = html`<form id="txf" class="form" novalidate>
     ${!editing ? html`<div class="form-shortcuts"><button type="button" class="btn ghost sm" data-print>${icon('camera')} Ler print da compra</button></div>` : ''}
@@ -120,13 +122,13 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
     </div>
     <datalist id="f-last4-list">${knownLast4().map((c) => html`<option value="${c}">${cardInfo(c)?.bank || ''}</option>`)}</datalist>
     <datalist id="f-bank-list">${knownBanks().map((c) => html`<option value="${c}"></option>`)}</datalist>
-    ${!editing
+    ${canSplit
       ? html`<div class="row2" id="f-inst-wrap">
           <label class="field"><span>Parcelas</span><input id="f-inst" type="number" name="installments" min="1" max="72" inputmode="numeric" value="${v.installments || 1}"></label>
           <label class="field" id="f-pmt-wrap"><span>Valor da parcela</span><input id="f-pmt" name="installmentValue" inputmode="decimal" placeholder="sem juros" value="${moneyInput(v.installmentValue)}"></label>
         </div>
         <div id="f-juros" class="juros" hidden></div>
-        <label class="check" id="f-rec-wrap"><input type="checkbox" id="f-rec" name="recurring"> <span>Repetir todo mês (conta fixa, salário)</span></label>`
+        ${!editing ? html`<label class="check" id="f-rec-wrap"><input type="checkbox" id="f-rec" name="recurring"> <span>Repetir todo mês (conta fixa, salário)</span></label>` : ''}`
       : ''}
     <label class="field" id="f-due-wrap" hidden><span id="f-due-label">Vencimento da 1ª parcela</span><input id="f-due" type="date" name="firstDue" value="${v.firstDue || ''}"><small class="hint"><span id="f-cycle"></span><span id="f-due-hint">As próximas parcelas entram nos meses seguintes, no mesmo dia.</span></small></label>
     <details class="more" ${extracted || v.merchant ? 'open' : ''}><summary>Mais detalhes</summary>
@@ -165,7 +167,7 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           $('#f-pmt-wrap').hidden = n <= 1;
           showDue(type, method, n > 1);
           $('#f-pmt').placeholder = method === 'pix_parcelado' ? 'com juros' : 'sem juros';
-          $('#f-rec-wrap').hidden = n > 1;
+          if ($('#f-rec-wrap')) $('#f-rec-wrap').hidden = n > 1;
           renderJuros(n, method);
         } else showDue(type, method, Boolean(editing?.installment));
         const nNow = $('#f-inst-wrap') && !$('#f-inst-wrap').hidden ? +val('installments') || 1 : 1;
@@ -323,10 +325,30 @@ export function openTxForm({ prefill = {}, editId = null, extracted = null, engi
           merchant: val('merchant')?.trim() || '',
           location: val('location')?.trim() || '',
           internal,
+          txid: v.txid || extracted?.transactionId || null,
           // juros/taxa dentro do valor (só gasto à vista; no parcelado o juro sai das parcelas)
           fee: !internal && type === 'expense' && n === 1 ? Math.min(readMoney(val('fee')) || 0, amount) : 0,
           feeKind: v.feeKind || 'taxa',
         };
+        if (editing && n > 1 && canSplit) {
+          // gasto à vista que virou parcelado: sai o lançamento único e entram as parcelas (cada uma no seu mês)
+          const firstDue = val('firstDue') || '';
+          const removed = deleteTransaction(editId);
+          const ids = addTransaction({ ...draft, firstDue, installments: n, installmentValue: pmt > 0 ? pmt : null, source: editing.source || 'manual' });
+          rememberCard(draft.last4, { bank: val('bank')?.trim(), due: firstDue });
+          const moved = alignCreditToDue();
+          sheet.close();
+          const first = getState().transactions.find((t) => t.id === ids[0]);
+          toast(`Dividido em ${n} parcelas de ${money(pmt > 0 ? pmt : amount / n, { force: true })}${first ? ` · 1ª em ${dateBR(first.date)}` : ''}`, {
+            action: 'Desfazer',
+            onAction: () => {
+              if (moved.length) undoAlign(moved);
+              ids.forEach((id) => deleteTransaction(id));
+              restoreTransactions(removed);
+            },
+          });
+          return;
+        }
         if (editing) {
           const { amount: _a, ...rest } = draft;
           const before = { ...editing }; // updateTransaction altera o próprio objeto
@@ -393,22 +415,15 @@ export function prefillFromExtract(x) {
     installmentValue: x.installments > 1 && x.installmentValue && Math.abs(x.installmentValue * x.installments - x.amount) > 0.05 ? x.installmentValue : '',
     fee: type === 'expense' && x.fee > 0 ? x.fee : '',
     feeKind: x.feeKind || null,
+    txid: x.transactionId || null,
   };
 }
 
 /** "Pix de Maria" <-> "Pix para Maria" ao trocar entre ganho e gasto. */
 const swapLabel = (description, type) => String(description || '').replace(/^(Pix|Transferência) (de|para) /, (_, what) => `${what} ${type === 'income' ? 'de' : 'para'} `);
 
-// "PADARIA DOCE PAO LTDA" -> "Padaria Doce Pao"
-const tidy = (s) =>
-  String(s)
-    .replace(/\b(ltda|me|eireli|s\.?a\.?|epp)\b\.?/gi, '')
-    .replace(/[*_]+/g, ' ')
-    .trim()
-    .toLowerCase()
-    .replace(/(^|\s)\S/g, (c) => c.toUpperCase())
-    // siglas sem vogal continuam em maiúsculas: "BANCO CSF" -> "Banco CSF"
-    .replace(/(?<![\p{L}\d])[b-df-hj-np-tv-z]{3,4}(?![\p{L}\d])/giu, (w) => w.toUpperCase());
+// "PADARIA DOCE PAO LTDA" -> "Padaria Doce Pao"; "ATIVOS S.A. SECURITIZADORA" -> "Ativos Securitizadora"; "BANCO CSF" -> "Banco CSF"
+const tidy = (s) => nameCase(String(s).replace(/[*_]+/g, ' '));
 
 /** Folha para enviar um print (ou colar o texto) de uma compra. `file`/`text` vêm do compartilhamento do celular. */
 export function openPrintSheet({ file, files, text } = {}) {
@@ -483,7 +498,7 @@ export function saveFromPrint(data) {
     installmentValue: n > 1 && p.installmentValue > 0 ? +p.installmentValue : null,
     source: 'print',
   };
-  if (findDuplicate({ type: draft.type, amount: n > 1 ? draft.installmentValue || amount / n : amount, date: draft.date, time: draft.time, installment: n > 1 ? { i: 1, n } : null, last4: draft.last4, description: draft.description }))
+  if (findDuplicate({ type: draft.type, amount: n > 1 ? draft.installmentValue || amount / n : amount, date: draft.date, time: draft.time, txid: draft.txid, installment: n > 1 ? { i: 1, n } : null, last4: draft.last4, description: draft.description }))
     return { saved: false, reason: 'repetido', data, draft };
   rememberCard(draft.last4, { bank: info?.bank ? '' : p.bank });
   return { saved: true, ids: addTransaction(draft), draft, data, known: Boolean(info?.dueDay) };

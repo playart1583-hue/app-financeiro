@@ -16,6 +16,10 @@ const EXPECTED = {
   'boleto.png': [350, 'boleto', 1, null, null, 'ESCOLA ABC', null, null],
   'csf.jpg': [31.49, 'pix', 1, null, 1.49, 'BANCO CSF', '2026-10-22', null],
   'mc8238.png': [150, null, 1, null, null, 'MAGAZINE CENTRO', '2026-10-15', '8238'],
+  // Mercado Pago, boleto pago no cartão em 3x; o centavo certo (67,03) vem da segunda leitura da imagem
+  'mp-conta1.jpg': [67.02, 'credito', 3, 22.34, null, 'ATIVOS S.A. SECURITIZADORA DE CREDITOS FINANCEIROS', '2026-10-31', '2223'],
+  'mp-conta2.jpg': [67.02, 'credito', 3, 22.34, null, null, null, '2223'],
+  'mp-conta3.jpg': [67.02, 'credito', 3, 22.34, null, 'DE CREDITOS FINANCEIROS', '2026-10-31', '2223'],
   'mp-pix.jpg': [null, 'credito', 1, null, null, 'Pix para Ciclano Pereira da Silva', '2026-10-23', '2223'],
   'p1.png': [50, 'pix', 1, null, null, 'Pix para Maria Souza', '2026-10-17', null],
   'p2.png': [23.9, 'credito', 1, null, null, 'PADARIA DOCE PAO', '2026-10-16', '4321'],
@@ -71,4 +75,12 @@ test('propaganda e nomes', () => {
   assert.equal(stripAds('Pix enviado\nR$ 10,00\nQuer mais benefícios?\nVincule sua chave Pix e ganhe até\nR$5,00\nConcluído'), 'Pix enviado\nR$ 10,00');
   assert.equal(nameCase('JC SERVICOS E APOIO ADMINISTRATIVOS LTDA'), 'JC Servicos e Apoio Administrativos');
   assert.equal(nameCase('A&M 2BUSINESS LTDA'), 'A&M 2Business');
+});
+
+test('pagamento de conta no cartão: é gasto, e os prints da mesma operação têm o mesmo número', () => {
+  const ids = ['mp-conta1.jpg', 'mp-conta2.jpg', 'mp-conta3.jpg'].map((f) => parseReceipt(PRINTS[f], { today }));
+  assert.deepEqual(ids.map((r) => r.type), ['expense', 'expense', 'expense']); // "vai ser creditado em até 2 dias úteis" não é ganho
+  assert.deepEqual(ids.map((r) => r.transactionId), ['100200300400', '100200300400', '100200300400']);
+  assert.equal(parseReceipt('Valor R$ 30,00\nID da transação 99Pay 1234567890123', { today }).transactionId, '1234567890123');
+  assert.equal(parseReceipt(PRINTS['p1.png'], { today }).transactionId, null);
 });

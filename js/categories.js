@@ -21,7 +21,7 @@ export const EXPENSE_CATEGORIES = [
   { id: 'beleza', name: 'Beleza e cuidados', icon: '💇', cls: 'importante', kw: ['salao', 'cabeleireiro', 'barbearia', 'barbeiro', 'manicure', 'cosmetico', 'boticario', 'natura', 'sephora', 'academia', 'smart fit', 'estetica'] },
   { id: 'pets', name: 'Pets', icon: '🐾', cls: 'importante', kw: ['petshop', 'pet shop', 'veterinario', 'racao', 'cobasi', 'petz', 'banho e tosa'] },
   { id: 'viagem', name: 'Viagem', icon: '✈️', cls: 'superfluo', kw: ['hotel', 'pousada', 'passagem', 'airbnb', 'booking', 'latam', 'gol linhas', 'azul linhas', 'decolar', 'hurb', '123milhas', 'rodoviaria'] },
-  { id: 'dividas', name: 'Dívidas e empréstimos', icon: '💳', cls: 'essencial', kw: ['emprestimo', 'parcela do emprestimo', 'fatura', 'juros', 'financiamento', 'consignado', 'acordo', 'renegociacao', 'serasa'] },
+  { id: 'dividas', name: 'Dívidas e empréstimos', icon: '💳', cls: 'essencial', kw: ['emprestimo', 'parcela do emprestimo', 'fatura', 'juros', 'financiamento', 'consignado', 'acordo', 'renegociacao', 'serasa', 'securitizadora', 'recuperadora de credito', 'limpa nome'] },
   { id: 'presentes', name: 'Presentes e doações', icon: '🎁', cls: 'importante', kw: ['presente', 'doacao', 'vaquinha', 'dizimo', 'oferta'] },
   { id: 'impostos', name: 'Impostos e taxas', icon: '🧾', cls: 'essencial', kw: ['imposto', 'taxa', 'multa', 'darf', 'tarifa', 'anuidade', 'iof', 'das mei'] },
   // "mercado pago" é carteira, não supermercado: a palavra-chave mais longa evita cair em "Mercado"
@@ -50,6 +50,11 @@ export const normalize = (s) =>
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '');
 
+const atWordStart = (t, k) => {
+  for (let i = t.indexOf(k); i >= 0; i = t.indexOf(k, i + 1)) if (!/[a-z0-9]/.test(t[i - 1] || ' ')) return true;
+  return false;
+};
+
 /** Sugere categoria a partir de um texto livre. Retorna id ou null. */
 export function categorize(text, type = 'expense') {
   const t = ' ' + normalize(text) + ' ';
@@ -58,8 +63,9 @@ export function categorize(text, type = 'expense') {
   let bestLen = 0;
   for (const c of list) {
     for (const k of c.kw) {
-      // palavra-chave mais longa vence ("mercado livre" > "mercado")
-      if (k.length > bestLen && t.includes(k)) {
+      // palavra-chave mais longa vence ("mercado livre" > "mercado"); só vale no começo de uma palavra
+      // ("ração" não acha "alteração", "pet" não acha "carpete")
+      if (k.length > bestLen && atWordStart(t, k)) {
         best = c.id;
         bestLen = k.length;
       }

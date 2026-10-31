@@ -248,6 +248,7 @@ export function addTransaction(draft) {
     // transferência entre contas suas: aparece no extrato, mas não conta como gasto nem ganho
     ...(draft.internal ? { internal: true } : {}),
     ...(draft.loanId ? { loanId: draft.loanId } : {}),
+    ...(draft.txid ? { txid: draft.txid } : {}),
     createdAt: Date.now(),
   };
   commit((s) => {
@@ -504,6 +505,8 @@ export function findDuplicate(draft) {
   const d = new Date((draft.date || toISO(new Date())) + 'T12:00:00');
   return state.transactions.find((t) => {
     if (draft.fitid && t.fitid) return draft.fitid === t.fitid;
+    // número da transação lido do comprovante: o mesmo em todos os prints da mesma operação
+    if (draft.txid && t.txid) return draft.txid === t.txid;
     // parcela de fatura que já foi criada como "parcela futura" numa importação anterior
     if (draft.installment && t.installment && t.installment.i === draft.installment.i && t.installment.n === draft.installment.n && Math.abs(t.amount - draft.amount) < 0.01 && sameCompra(t, draft)) {
       // até ~2,5 meses: a parcela pode ter sido guardada no vencimento, e a da fatura vem com a data da compra

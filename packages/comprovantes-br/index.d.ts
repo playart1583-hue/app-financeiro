@@ -40,6 +40,8 @@ export interface Receipt {
   fee: number | null;
   /** "taxa" (taxa, tarifa, IOF) ou "juros" (juros, multa, mora, encargos). */
   feeKind: 'taxa' | 'juros' | null;
+  /** Número da transação ("N.º da transação", "ID da transação", autenticação, NSU), em maiúsculas. */
+  transactionId: string | null;
   location: string | null;
   /** Categoria devolvida pela função `categorize` das opções, ou null. */
   category: string | null;

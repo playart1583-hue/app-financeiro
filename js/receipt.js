@@ -192,7 +192,11 @@ export async function analyzePurchase(file, opts = {}) {
   let cents = null;
   // valor com centavos pequenos no alto ("R$ 5 ³²"): o OCR lê "R$ 5º"; uma segunda leitura recorta e lê as duas partes
   const onOcr = async (worker, data, blob) => {
-    if (cutCents(data.text)) cents = await superscriptAmount(worker, blob, data).catch(() => null);
+    const reais = cutCents(data.text);
+    if (reais == null) return;
+    cents = await superscriptAmount(worker, blob, data).catch(() => null);
+    // os reais da segunda leitura têm que bater com os da primeira, quando ela leu algum
+    if (cents && reais && Math.floor(cents) !== +reais) cents = null;
   };
   const r = await readImage(file, { ...opts, prompt: purchasePrompt(toISO(new Date())), schema: PURCHASE_SCHEMA, onOcr });
   if (r.json) return { data: normalizeClaudePurchase(r.json), engine: r.engine };
@@ -201,10 +205,10 @@ export async function analyzePurchase(file, opts = {}) {
   return { data, engine: r.engine };
 }
 
-// o primeiro "R$" do print vem sem centavos ("R$ 5º", "R$ 5 -", "R$ 1.234")
+// o primeiro "R$" do print vem sem centavos ("R$ 5º", "R$ 5 -", "R$ 1.234"): devolve os reais lidos (ou '' se não vieram)
 const cutCents = (text) => {
-  const m = String(text || '').match(/r\s?\$\s*([\d.]+)([^\n]{0,4})/i);
-  return Boolean(m) && !/^,\d{2}/.test(m[2]);
+  const m = String(text || '').match(/r\s?\$\s*([\d.]*)([^\n]{0,4})/i);
+  return m && !/^,\d{2}/.test(m[2]) ? m[1].replace(/\D/g, '') : null;
 };
 
 /**
@@ -234,13 +238,14 @@ async function superscriptAmount(worker, blob, data) {
   const px = g.getImageData(0, 0, W, H).data;
   const dark = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) dark[i] = 0.3 * px[i * 4] + 0.59 * px[i * 4 + 1] + 0.11 * px[i * 4 + 2] < 140 ? 1 : 0;
-  const seen = new Uint8Array(W * H);
-  const comps = [];
+  const seen = new Int32Array(W * H); // número da mancha de cada pixel (0 = nenhuma)
+  const blobs = [];
   const stack = [];
   for (let i = 0; i < W * H; i++) {
     if (!dark[i] || seen[i]) continue;
+    const id = blobs.length + 1;
     let [minX, minY, maxX, maxY, n] = [W, H, 0, 0, 0];
-    seen[i] = 1;
+    seen[i] = id;
     stack.push(i);
     while (stack.length) {
       const j = stack.pop();
@@ -251,13 +256,18 @@ async function superscriptAmount(worker, blob, data) {
       if (x > maxX) maxX = x;
       if (y < minY) minY = y;
       if (y > maxY) maxY = y;
-      for (const q of [j - 1, j + 1, j - W, j + W]) if (q >= 0 && q < W * H && dark[q] && !seen[q] && Math.abs((q % W) - x) <= 1) (seen[q] = 1), stack.push(q);
+      for (const q of [j - 1, j + 1, j - W, j + W]) if (q >= 0 && q < W * H && dark[q] && !seen[q] && Math.abs((q % W) - x) <= 1) (seen[q] = id), stack.push(q);
     }
-    if (n > 20) comps.push({ x0: minX, y0: minY, x1: maxX, y1: maxY, h: maxY - minY + 1 });
+    // manchas pequenas também ganham número (para não serem visitadas de novo), mas não entram na lista
+    blobs.push({ id, x0: minX, y0: minY, x1: maxX, y1: maxY, h: maxY - minY + 1, n });
   }
+  const comps = blobs.filter((c) => c.n > 20);
   if (!comps.length) return null;
   comps.sort((a, b) => a.x0 - b.x0);
-  const top = Math.max(...comps.map((c) => c.h));
+  // o "$" do "R$" pode entrar no recorte quando o OCR grudou "R$67": é mais alto que os números e sai da conta
+  const tall = comps.filter((c) => c.h >= Math.max(...comps.map((x) => x.h)) * 0.6);
+  while (tall.length > 1 && tall[0].h > 1.12 * Math.max(...tall.slice(1).map((c) => c.h))) comps.splice(comps.indexOf(tall.shift()), 1);
+  const top = Math.max(...tall.map((c) => c.h));
   // reais: manchas altas seguidas, da esquerda para a direita (pontos de milhar são pequenos e não contam)
   const big = [];
   for (const c of comps) {
@@ -271,23 +281,47 @@ async function superscriptAmount(worker, blob, data) {
   // centavos: manchas menores, alinhadas pelo alto, logo à direita
   const small = comps.filter((c) => c.x0 >= bigRight - 2 && c.x0 - bigRight < top * 1.2 && c.h >= top * 0.25 && c.h < top * 0.7 && c.y0 < bigTop + top * 0.3);
   if (!small.length) return null;
-  const read = async (group, targetH) => {
+  // redesenha só os traços das manchas do grupo, em preto sobre branco (sem pedaços dos vizinhos), e amplia
+  const read = async (group, targetH, want = 0) => {
+    const ids = new Set(group.map((c) => c.id));
     const u = { x0: Math.min(...group.map((c) => c.x0)), y0: Math.min(...group.map((c) => c.y0)), x1: Math.max(...group.map((c) => c.x1)), y1: Math.max(...group.map((c) => c.y1)) };
-    const pad = Math.round((u.y1 - u.y0) * 0.35);
-    const s = targetH / (u.y1 - u.y0 + 2 * pad);
+    const pad = Math.max(4, Math.round((u.y1 - u.y0) * 0.5));
+    const mw = u.x1 - u.x0 + 1 + 2 * pad;
+    const mh = u.y1 - u.y0 + 1 + 2 * pad;
+    const mask = document.createElement('canvas');
+    mask.width = mw;
+    mask.height = mh;
+    const mg = mask.getContext('2d');
+    const img = mg.createImageData(mw, mh);
+    img.data.fill(255);
+    for (let y = u.y0; y <= u.y1; y++)
+      for (let x = u.x0; x <= u.x1; x++)
+        if (ids.has(seen[y * W + x])) {
+          const o = ((y - u.y0 + pad) * mw + (x - u.x0 + pad)) * 4;
+          img.data[o] = img.data[o + 1] = img.data[o + 2] = 0;
+        }
+    mg.putImageData(img, 0, 0);
+    const s = targetH / mh;
     const c = document.createElement('canvas');
-    c.width = Math.round((u.x1 - u.x0 + 2 * pad) * s);
+    c.width = Math.round(mw * s);
     c.height = targetH;
     const cg = c.getContext('2d');
     cg.fillStyle = '#fff';
     cg.fillRect(0, 0, c.width, c.height);
-    cg.drawImage(canvas, u.x0 - pad, u.y0 - pad, u.x1 - u.x0 + 2 * pad, u.y1 - u.y0 + 2 * pad, 0, 0, c.width, c.height);
-    const out = await worker.recognize(c);
-    return (out.data.text || '').replace(/\D/g, '');
+    cg.drawImage(mask, 0, 0, c.width, c.height);
+    // um algarismo sozinho não sai no modo "linha": tenta palavra, caractere e linha crua.
+    // Nos centavos, o zero redondo sai como a letra O: aceita e troca por 0
+    for (const psm of ['7', '8', '10', '13']) {
+      await worker.setParameters({ tessedit_char_whitelist: want ? '0123456789Oo' : '0123456789', tessedit_pageseg_mode: psm });
+      const digits = ((await worker.recognize(c)).data.text || '').replace(/[Oo]/g, '0').replace(/\D/g, '');
+      if (digits && (!want || digits.length === want)) return digits;
+    }
+    return '';
   };
-  await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: '7' });
   const reais = await read(big, 120);
-  const cents = await read(small, 120);
+  let cents = await read(small, 120, 2);
+  // centavos que não saíram juntos: um algarismo de cada vez
+  if (!/^\d{2}$/.test(cents) && small.length === 2) cents = (await read([small[0]], 120, 1)) + (await read([small[1]], 120, 1));
   if (!/^\d{1,6}$/.test(reais) || !/^\d{2}$/.test(cents)) return null;
   return +reais + +cents / 100;
 }

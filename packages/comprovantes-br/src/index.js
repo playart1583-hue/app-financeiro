@@ -231,11 +231,15 @@ export function parseReceipt(text, { today = new Date(), categorize = null } = {
     const m = lines[k].match(/^(?:transferido|transferida|transferir|transfer[eê]ncia|enviado|enviada|pago|paga|pagamento|pix)\s+(?:para|a)\s*:?\s+(\S.{2,60})$/i);
     if (m && !masked(m[1])) merchant = withNext(k, m[1]);
   }
-  // Mercado Pago, Nubank: o nome vem na linha de cima de "Pix enviado" / "Transferência enviada"
+  // Mercado Pago, Nubank: o nome vem na linha de cima de "Pix enviado" / "Pagamento de conta" (às vezes em duas linhas)
+  const nameLike = (s) => /^[\p{L}][\p{L}.' &-]{2,60}$/u.test(s || '') && !masked(s) && !/comprovante|\bpix\b|transfer|pagamento|aprovad|conclu|detalhes/.test(normalize(s));
   for (let k = 1; k < lines.length && !merchant; k++) {
-    if (!/^(pix|transferencia|ted|doc) (enviad|realizad|feit|recebid)/.test(normalize(lines[k]))) continue;
+    if (!/^((pix|transferencia|ted|doc) (enviad|realizad|feit|recebid)|pagamento de (conta|boleto|fatura)|pagamento (realizado|efetuado|aprovado))/.test(normalize(lines[k]))) continue;
     const name = lines[k - 1];
-    if (/^[\p{L}][\p{L}.' &-]{2,60}$/u.test(name) && name.trim().split(/\s+/).length >= 2 && !masked(name) && !/comprovante|\bpix\b|transfer|pagamento|aprovad|conclu|detalhes/.test(normalize(name))) merchant = name;
+    if (!nameLike(name)) continue;
+    // nome que quebrou em duas linhas ("ATIVOS S.A. SECURITIZADORA" / "DE CREDITOS FINANCEIROS")
+    if (k >= 2 && caps(name) && caps(lines[k - 2]) && nameLike(lines[k - 2])) merchant = `${lines[k - 2]} ${name}`;
+    else if (name.trim().split(/\s+/).length >= 2) merchant = name;
   }
   // "Para JC SERVICOS E APOIO" (comprovante sem dois-pontos): nome em maiúsculas logo depois de "Para"
   for (let k = 0; k < lines.length && !merchant; k++) {
@@ -270,10 +274,10 @@ export function parseReceipt(text, { today = new Date(), categorize = null } = {
   }
   // linha só com o nome da loja em maiúsculas ("PADARIA DOCE PAO", "MAGAZINE CENTRO")
   if (!merchant) {
-    merchant =
-      lines.find(
-        (l) => caps(l) && !/r\$|\d{3}|\d{1,2}\/\d{1,2}/i.test(l) && !/^(valor|data|total|cartao|credito|debito|pix|comprovante|pagamento|compra|aprovad|transferencia|boleto|vencimento|beneficiario|cpf|cnpj|status|conclu)/.test(normalize(l)),
-      ) || null;
+    const k = lines.findIndex(
+      (l) => caps(l) && !/r\$|\d{3}|\d{1,2}\/\d{1,2}/i.test(l) && !/^(valor|data|total|cartao|credito|debito|pix|comprovante|pagamento|compra|aprovad|transferencia|boleto|vencimento|beneficiario|cpf|cnpj|status|conclu)/.test(normalize(l)),
+    );
+    merchant = k >= 0 ? withNext(k, lines[k]) : null;
   }
   if (merchant) merchant = merchant.replace(/\s{2,}/g, ' ').replace(/[*]+/g, ' ').trim();
 
@@ -289,6 +293,17 @@ export function parseReceipt(text, { today = new Date(), categorize = null } = {
   const dueIdx = dueLine ? lines.indexOf(dueLine) : -1;
   const dueDate = dueLine ? findDate(dueLine, today) || findDate(lines[dueIdx + 1] || '', today) : null;
   const date = findDate(dueDate ? lines.filter((l, k) => k !== dueIdx && !(k === dueIdx + 1 && !findDate(dueLine, today))).join('\n') : original, today);
+  // número da transação ("N.º da transação 185984311285", "ID da transação E2431..."): o mesmo em todos os prints
+  // de uma operação, serve para reconhecer prints repetidos
+  let transactionId = null;
+  for (let k = 0; k < lines.length && !transactionId; k++) {
+    const n = normalize(lines[k]);
+    const m = n.match(/\b(?:n\.?\s*[ºo°]?\.?\s*d[ao] transacao|id d[ao] transacao|codigo d[ao] transacao|codigo de autenticacao|autenticacao|nsu)\b(.*)$/);
+    if (!m) continue;
+    const pick = (s) => (String(s || '').match(/\b(?=[a-z0-9]*\d{6})[a-z0-9]{8,}\b/i) || [])[0] || null;
+    const raw = pick(lines[k].slice(lines[k].length - m[1].length)) || pick(lines[k + 1]);
+    if (raw) transactionId = raw.toUpperCase();
+  }
   // horário da linha que tem a data (o primeiro do print costuma ser o relógio do celular)
   const time = findTime(lines.filter((l) => /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l) || findDate(l, today)).join('\n')) || findTime(original);
   const income = flowDirection(t) === 'income';
@@ -367,6 +382,7 @@ export function parseReceipt(text, { today = new Date(), categorize = null } = {
     cashPrice,
     fee: fee > 0 ? fee : null,
     feeKind: fee > 0 ? feeKind : null,
+    transactionId,
     location: cityMatch ? cityMatch[1].trim() : null,
     category: category || null,
     app,
@@ -419,16 +435,18 @@ function notificationCounterpart(text) {
   let v = m[1].trim();
   while (APP_PREFIX.test(`${v} `)) v = `${v} `.replace(APP_PREFIX, '').trim();
   v = v.replace(/^(?:pix|transfer[eê]ncia)\s+(?:recebid[oa]|enviad[oa])\s*/i, '').trim();
-  return !v || /^(r\$|\d|voc[eê]\b)/i.test(v) ? null : v;
+  return !v || /^(r\$|\d|voc[eê](?=\s|$)|at[eé](?=\s|$))/i.test(v) ? null : v;
 }
 
 // Entrada x saída nas notificações. Frases de saída que contêm "recebeu" (quem recebeu foi o outro) vêm antes,
 // e quando há frases dos dois lados vale a que aparece primeiro (o título da notificação).
-const OUT_FLOW = /\b(voce (?:enviou|transferiu|pagou|fez um pix|fez uma transferencia)|pix enviado|pix realizado|pix feito|transferencia (?:enviada|realizada|feita|efetuada|concluida)|pagamento (?:realizado|aprovado|efetuado|enviado|feito|concluido)|compra (?:aprovada|realizada|no)|(?:ja )?recebeu (?:o |a )?(?:seu|sua)|recebid[oa] por|enviad[oa] (?:para|com sucesso)|seu pix (?:para|de r)|sua transferencia|debito|debitad[oa]|saque|saiu da sua conta|corrida|viagem)/;
+const OUT_FLOW = /\b(voce (?:enviou|transferiu|pagou|fez um pix|fez uma transferencia)|pagamento de (?:conta|boleto|fatura)|meio de pagamento|boleto pago|conta paga|pix enviado|pix realizado|pix feito|transferencia (?:enviada|realizada|feita|efetuada|concluida)|pagamento (?:realizado|aprovado|efetuado|enviado|feito|concluido)|compra (?:aprovada|realizada|no)|(?:ja )?recebeu (?:o |a )?(?:seu|sua)|recebid[oa] por|enviad[oa] (?:para|com sucesso)|seu pix (?:para|de r)|sua transferencia|debito|debitad[oa]|saque|saiu da sua conta|corrida|viagem)/;
 const IN_FLOW = /\b(te (?:enviou|enviaram|mandou|transferiu|pagou)|(?:enviou|transferiu|mandou|pagou)\b[^.!\n]{0,40}? (?:para|pra) (?:voce|sua conta)|voce recebeu|recebeu (?:um|uma|r\$|\d)|pix recebido|transferencia recebida|dinheiro recebido|pagamento recebido|recebimento|recebid[oa](?! por)|credito em conta|creditad[oa]|deposito|caiu na sua conta|entrou na sua conta|chegou (?:um|uma|dinheiro|r\$|o pix|seu pix)|estorno|estornad[oa]|reembolso|devolucao|devolvid[oa]|cashback|rendeu|rendimento)/;
 
 /** 'income' | 'expense' pelo texto (já normalizado) de uma notificação ou comprovante. */
 export function flowDirection(t) {
+  // "O pagamento vai ser creditado em até 2 dias úteis" fala do prazo de quem recebe, não de dinheiro entrando
+  t = String(t).replace(/(?:prazo de (?:a)?credita\w*|(?:vai ser|sera|serao|sendo) creditad\w*)[^\n]*/g, ' ');
   const o = t.match(OUT_FLOW);
   const i = t.match(IN_FLOW);
   if (o && i) return o.index <= i.index ? 'expense' : 'income';
