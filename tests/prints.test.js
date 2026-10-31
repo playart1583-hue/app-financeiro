@@ -16,6 +16,10 @@ const EXPECTED = {
   'mc8238.png': [150, null, 1, null, null, 'MAGAZINE CENTRO', '2026-10-15', '8238'],
   'p1.png': [50, 'pix', 1, null, null, 'Pix para Maria Souza', '2026-10-17', null],
   // Mercado Pago: "R$ 5 ³²" (centavos pequenos no alto) o OCR lê "R$ 5º"; o valor vem da segunda leitura (receipt.js)
+  // Mercado Pago, boleto pago no cartão em 3x; o centavo certo (67,03) vem da segunda leitura da imagem
+  'mp-conta1.jpg': [67.02, 'credito', 3, 22.34, null, 'ATIVOS S.A. SECURITIZADORA DE CREDITOS FINANCEIROS', '2026-10-31', '2223'],
+  'mp-conta2.jpg': [67.02, 'credito', 3, 22.34, null, null, null, '2223'],
+  'mp-conta3.jpg': [67.02, 'credito', 3, 22.34, null, 'DE CREDITOS FINANCEIROS', '2026-10-31', '2223'],
   'mp-pix.jpg': [null, 'credito', 1, null, null, 'Pix para Ciclano Pereira da Silva', '2026-10-23', '2223'],
   'p2.png': [23.9, 'credito', 1, null, null, 'PADARIA DOCE PAO', '2026-10-16', '4321'],
   'p3.png': [300, 'credito', 3, 100, null, 'MAGAZINE LOJA', '2026-10-15', null],
