@@ -507,13 +507,18 @@ export function findDuplicate(draft) {
     if (draft.fitid && t.fitid) return draft.fitid === t.fitid;
     // número da transação lido do comprovante: o mesmo em todos os prints da mesma operação
     if (draft.txid && t.txid) return draft.txid === t.txid;
+    const days = (iso) => Math.abs(new Date(iso + 'T12:00:00') - d) / 86400000;
     // parcela de fatura que já foi criada como "parcela futura" numa importação anterior
-    if (draft.installment && t.installment && t.installment.i === draft.installment.i && t.installment.n === draft.installment.n && Math.abs(t.amount - draft.amount) < 0.01 && sameCompra(t, draft)) {
+    if (draft.installment && t.installment && t.installment.i === draft.installment.i && t.installment.n === draft.installment.n) {
       // até ~2,5 meses: a parcela pode ter sido guardada no vencimento, e a da fatura vem com a data da compra
-      return Math.abs(new Date(t.date + 'T12:00:00') - d) / 86400000 <= 75;
+      if (Math.abs(t.amount - draft.amount) < 0.01 && sameCompra(t, draft) && days(t.date) <= 75) return true;
+      // a mesma compra com outro nome ("99" na fatura, "Pix parcelado para Fulano" no app): mesma data de compra
+      // (até 3 dias), mesmo valor de parcela (centavos de arredondamento) e cartão que não é outro
+      if (Math.abs(t.amount - draft.amount) < 0.025 && days(t.purchaseDate || t.date) <= 3 && !(t.last4 && draft.last4 && t.last4 !== draft.last4)) return true;
     }
     if (t.type !== draft.type || Math.abs(t.amount - draft.amount) > 0.009) return false;
-    const diff = Math.abs(new Date(t.date + 'T12:00:00') - d) / 86400000;
+    // no crédito o lançamento fica no vencimento: vale também a data da compra
+    const diff = Math.min(days(t.date), t.purchaseDate ? days(t.purchaseDate) : Infinity);
     if (diff > 1) return false;
     if (draft.time && t.time && draft.time !== t.time) return false;
     return true;

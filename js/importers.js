@@ -207,6 +207,9 @@ export function cleanDescription(desc) {
   return String(desc || '')
     .replace(/\s*-?\s*parc(?:ela)?\.?\s*\d{1,2}\s*(?:\/|de)\s*\d{1,2}/i, '')
     .replace(/\s+\d{1,2}\/\d{1,2}$/, '')
+    // "99 (4/4) –": parcela entre parênteses e travessão solto no fim
+    .replace(/\s*\(\s*\d{1,2}\s*\/\s*\d{1,2}\s*\)/, '')
+    .replace(/\s*[–—-]+\s*$/, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }

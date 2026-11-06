@@ -5,7 +5,7 @@ import { cloud, exportJSON, getApiKey, importJSON, loadDemo, resetAll, setApiKey
 import { html, icon, pct, toast } from '../ui.js';
 import { isNativeApp, nativeBridge } from '../native.js';
 import { confirmIdentity, lockStatus } from '../lock.js';
-import { alignCreditToDue, cardList, cycleText, removeCard, saveCard, undoAlign } from '../cards.js';
+import { alignCreditToDue, cardInfo, cardList, cycleText, realignCard, removeCard, saveCard, undoAlign } from '../cards.js';
 import { WEEKDAYS, askNotificationPermission, notificationPermission, reminderPrefs, remindersAvailable, scheduleReminders, testNotification } from '../reminders.js';
 
 const SYNC = {
@@ -178,8 +178,12 @@ export default {
     cardf.last4.addEventListener('input', (e) => (e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4)));
     cardf.addEventListener('submit', (e) => {
       e.preventDefault();
+      const before = { ...(cardInfo(cardf.last4.value) || {}) };
       if (!saveCard(cardf.last4.value, { bank: cardf.bank.value, dueDay: cardf.dueDay.value, closeDay: cardf.closeDay.value })) return toast('Informe os 4 últimos números do cartão.');
-      const moved = alignCreditToDue();
+      const after = cardInfo(cardf.last4.value) || {};
+      // fechamento ou vencimento mudou: as compras desse cartão mudam de fatura conforme o ciclo novo
+      const changed = before.dueDay && (before.dueDay !== after.dueDay || (before.closeDay || null) !== (after.closeDay || null));
+      const moved = [...alignCreditToDue(), ...(changed ? realignCard(cardf.last4.value) : [])];
       toast(moved.length ? `Cartão ${cardf.last4.value} salvo. ${moved.length} lançamento${moved.length > 1 ? 's' : ''} no crédito ${moved.length > 1 ? 'foram' : 'foi'} para o mês do vencimento.` : `Cartão ${cardf.last4.value} salvo`, moved.length ? { action: 'Desfazer', onAction: () => undoAlign(moved), timeout: 10000 } : {});
     });
     root.querySelectorAll('[data-card-edit]').forEach((b) =>

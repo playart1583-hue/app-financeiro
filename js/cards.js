@@ -148,6 +148,33 @@ export function alignCreditToDue() {
   return moved.filter((m) => m.to !== m.from);
 }
 
+/**
+ * O fechamento ou o vencimento do cartão mudou: as compras dele que já estavam num vencimento calculado vão para o
+ * vencimento certo pelo ciclo novo (parcela k: k-1 meses depois). As importadas da fatura ficam onde estão (o
+ * vencimento veio do banco). Uma compra parcelada se move inteira, mesmo que só uma parcela tenha o final do cartão.
+ */
+export function realignCard(last4) {
+  const info = cardInfo(last4);
+  if (!info?.dueDay) return [];
+  const list = getState().transactions.filter((t) => t.type === 'expense' && !t.internal && ['credito', 'pix_parcelado'].includes(t.method) && t.purchaseDate && !t.dueGuess && t.source !== 'fatura');
+  const ofCard = (t) => (t.last4 || splitCard(t.card).last4) === last4;
+  const groups = new Set(list.filter((t) => t.installment?.groupId && ofCard(t)).map((t) => t.installment.groupId));
+  const moved = [];
+  for (const t of list) {
+    if (!(ofCard(t) || groups.has(t.installment?.groupId))) continue;
+    const due1 = dueFor(t.purchaseDate, info);
+    if (!due1) continue;
+    const to = addMonthsISO(due1, (t.installment?.i || 1) - 1);
+    if (to !== t.date) moved.push({ id: t.id, from: t.date, to, purchase: t.purchaseDate, keep: true });
+  }
+  if (!moved.length) return [];
+  const byId = new Map(moved.map((m) => [m.id, m]));
+  commit((s) => {
+    for (const t of s.transactions) if (byId.has(t.id)) t.date = byId.get(t.id).to;
+  });
+  return moved;
+}
+
 /** Desfaz o alinhamento acima. */
 export function undoAlign(moved) {
   const byId = new Map(moved.map((m) => [m.id, m]));
@@ -157,7 +184,7 @@ export function undoAlign(moved) {
       if (!m) continue;
       t.date = m.from;
       if (m.guess) Object.assign(t, { purchaseDate: m.purchase, dueGuess: true });
-      else delete t.purchaseDate;
+      else if (!m.keep) delete t.purchaseDate;
     }
   });
 }
