@@ -681,3 +681,16 @@ body.has-sheet #toasts { top: calc(var(--safe-area-inset-top, env(safe-area-inse
 .fee-row { width: 100%; display: flex; gap: 12px; align-items: center; padding: 10px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .fee-row .tx-main small.fee-math { white-space: normal; line-height: 1.4; margin-top: 2px; }
 .fee-row .fee-math b { display: inline; font-weight: 700; color: var(--text); white-space: nowrap; }
+
+/* Extrato: fatura do cartão, com as compras separadas pelo dia da compra */
+.fatura { padding: 0; overflow: hidden; }
+.fatura > summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
+.fatura > summary::-webkit-details-marker { display: none; }
+.fatura > summary .tx-main { flex: 1; min-width: 0; }
+.fatura > summary .tile-ic { width: 40px; height: 40px; }
+.fatura > summary .chev { transition: transform .2s; color: var(--muted); flex: none; }
+.fatura[open] > summary .chev { transform: rotate(90deg); }
+.fatura { min-width: 0; }
+.fatura > .day { padding: 8px 14px 4px; border-top: 1px solid var(--line); grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.fatura .tx-list { margin: 0; padding: 0; }
+.fatura > summary .tx-main b, .fatura > summary .tx-main small { white-space: normal; overflow: visible; }
