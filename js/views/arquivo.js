@@ -171,6 +171,14 @@ function tableResult(t, mode, kind) {
 
 /** Texto colado: planilha copiada, extrato, fatura, notificações ou anotações livres. */
 function parseAnyText(text, mode) {
+  // linhas de extrato ou fatura começando pela data ("14/07 99 (4/4) – R$ 164,43"): a vírgula dos centavos
+  // não é separador de planilha
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const dated = lines.filter((l) => /^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\s/.test(l)).length;
+  if (dated >= Math.max(2, lines.length * 0.6)) {
+    const r = textResult(text, mode, 'Texto colado');
+    if (r.movements.length) return r;
+  }
   const t = parseCSV(text);
   if (t.headers.length >= 2 && t.rows.length) {
     const r = tableResult(t, mode, 'Texto colado');
@@ -388,7 +396,8 @@ function renderReview(r, sheet, mode) {
   // final do cartão: o da fatura/arquivo, ou o que todos os prints mostram
   const rowFinals = [...new Set(r.movements.map((m) => m.last4).filter(Boolean))];
   const defLast4 = r.card?.last4 || (rowFinals.length === 1 ? rowFinals[0] : '') || findKnownLast4(r.rawText);
-  const defBank = (r.card && [r.card.bank, r.card.brand].filter(Boolean).join(' · ')) || cardInfo(defLast4)?.bank || '';
+  // banco do cartão cadastrado vale mais que o nome de app lido no texto ("99Pay" numa fatura do Bradesco)
+  const defBank = cardInfo(defLast4)?.bank || (r.card && [r.card.bank, r.card.brand].filter(Boolean).join(' · ')) || '';
   // tem cartão no arquivo/prints: compras no crédito vão para o mês em que a fatura vence
   const hasCard = Boolean(defLast4 || rowFinals.length || r.movements.some((m) => m.card));
   const lastDate = () => r.movements.map((m) => m.date).sort().pop();
@@ -479,12 +488,13 @@ function renderReview(r, sheet, mode) {
       if (e.target.name === 'use') e.target.closest('.rv-row').classList.toggle('off', !e.target.checked);
       updateSum();
     });
+    f.elements['o-bank'].addEventListener('input', (e) => (e.target.dataset.typed = '1'));
     // final conhecido: completa banco e vencimento cadastrados
     f.querySelector('[name=o-last4]').addEventListener('input', (e) => {
       e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
       const info = cardInfo(e.target.value);
       if (!info) return;
-      if (info.bank && !f.elements['o-bank'].value) f.elements['o-bank'].value = info.bank;
+      if (info.bank && (!f.elements['o-bank'].value || !f.elements['o-bank'].dataset.typed)) f.elements['o-bank'].value = info.bank;
       if (info.dueDay && f.elements['o-dueday'] && !f.elements['o-dueday'].value) f.elements['o-dueday'].value = info.dueDay;
       if (info.closeDay && f.elements['o-closeday'] && !f.elements['o-closeday'].value) f.elements['o-closeday'].value = info.closeDay;
       if (info.dueDay && f.elements['o-due'] && !f.elements['o-due'].value) f.elements['o-due'].value = dueFor(lastDate(), info);

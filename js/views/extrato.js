@@ -2,10 +2,14 @@ import { monthKey, monthSummary } from '../analytics.js';
 import { PAYMENT_METHODS, getCategory, normalize } from '../categories.js';
 import { toISO } from '../parser.js';
 import { dayLabel, emptyState, html, icon, money, monthName } from '../ui.js';
+import { cardInfo, splitCard } from '../cards.js';
 import { openTxForm } from './form.js';
 import { openFileImport } from './arquivo.js';
 
-export function txRow(t, compact = false) {
+const ddmm = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+/** `inCard`: linha dentro da fatura do cartão (mostra a data da compra, sem horário). */
+export function txRow(t, compact = false, { inCard = false } = {}) {
   const c = getCategory(t.category);
   const sign = t.type === 'income' ? 1 : -1;
   if (t.internal) {
@@ -16,10 +20,11 @@ export function txRow(t, compact = false) {
   </button></li>`;
   }
   const meta = [
-    t.time,
+    // na fatura vale o dia da compra, não o horário
+    inCard ? `compra ${ddmm(t.purchaseDate || t.date)}` : t.time,
     PAYMENT_METHODS[t.method],
     // no crédito o lançamento fica no mês do vencimento; mostra quando a compra foi feita
-    t.purchaseDate ? `compra ${t.purchaseDate.slice(8)}/${t.purchaseDate.slice(5, 7)}` : null,
+    !inCard && t.purchaseDate ? `compra ${ddmm(t.purchaseDate)}` : null,
     t.installment ? `${t.installment.i}/${t.installment.n}` : null,
     t.recurringId ? 'fixo' : null,
     t.fee > 0 ? `${money(t.fee)} de ${t.feeKind === 'juros' ? 'juros' : 'taxa'}` : null,
@@ -27,7 +32,7 @@ export function txRow(t, compact = false) {
   ].filter(Boolean);
   return html`<li><button type="button" class="tx" data-tx="${t.id}">
     <span class="tx-ic" aria-hidden="true">${c.icon}</span>
-    <span class="tx-main"><b>${t.description || c.name}</b><small>${c.name}${meta.length ? ` · ${meta.join(' · ')}` : ''}${t.source === 'print' ? ' · 📷' : ''}</small></span>
+    <span class="tx-main"><b>${t.description || c.name}</b><small>${inCard ? `${meta.join(' · ')} · ${c.name}` : `${c.name}${meta.length ? ` · ${meta.join(' · ')}` : ''}`}${t.source === 'print' ? ' · 📷' : ''}</small></span>
     <span class="tx-val ${t.type}">${money(sign * t.amount, { sign: true })}</span>
   </button></li>`;
 }
@@ -49,9 +54,42 @@ export default {
       .filter((t) => (f === 'all' ? true : !t.internal && t.type === f))
       .filter((t) => !q || normalize(`${t.description} ${getCategory(t.category).name} ${t.merchant} ${t.card}`).includes(q))
       .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
+    // compras no cartão: uma fatura por cartão e vencimento, separadas pelo dia da compra. Um parcelado é do cartão
+    // se qualquer parcela tiver o final (parcelas antigas podem ter ficado sem)
+    const finalOf = new Map();
+    for (const t of state.transactions) {
+      const l = t.last4 || splitCard(t.card).last4;
+      if (l && t.installment?.groupId) finalOf.set(t.installment.groupId, l);
+    }
+    const cardOf = (t) => (t.type === 'expense' && !t.internal && ['credito', 'pix_parcelado'].includes(t.method) ? t.last4 || splitCard(t.card).last4 || finalOf.get(t.installment?.groupId) || '' : '');
+    const invoices = new Map();
     const days = new Map();
-    for (const t of txs) (days.get(t.date) || days.set(t.date, []).get(t.date)).push(t);
+    for (const t of txs) {
+      const l = cardOf(t);
+      if (l) {
+        const k = `${t.date}|${l}`;
+        (invoices.get(k) || invoices.set(k, { due: t.date, last4: l, list: [] }).get(k)).list.push(t);
+      } else (days.get(t.date) || days.set(t.date, []).get(t.date)).push(t);
+    }
     const todayISO = toISO(new Date());
+    const byPurchase = (list) => {
+      const m = new Map();
+      for (const t of [...list].sort((a, b) => (b.purchaseDate || b.date).localeCompare(a.purchaseDate || a.date))) {
+        const d = t.purchaseDate || t.date;
+        (m.get(d) || m.set(d, []).get(d)).push(t);
+      }
+      return [...m.entries()];
+    };
+    const invoiceBlock = ({ due, last4, list }) => {
+      const total = list.reduce((s, t) => s + t.amount, 0);
+      const bank = cardInfo(last4)?.bank || splitCard(list.find((t) => t.card)?.card).bank || '';
+      return html`<details class="fatura card" open>
+        <summary><span class="tile-ic">${icon('card')}</span><span class="tx-main"><b>${bank ? `${bank} · ` : ''}final ${last4}</b><small>Fatura ${due > todayISO ? 'vence' : 'venceu'} ${ddmm(due)} · ${list.length} compra${list.length > 1 ? 's' : ''}</small></span><b class="tx-val expense">${money(-total, { sign: true })}</b>${icon('chevR', 'chev')}</summary>
+        ${byPurchase(list).map(
+          ([d, items]) => html`<section class="day"><div class="day-head"><span>${dayLabel(d, todayISO)}${items.length > 1 ? ` · ${items.length} compras` : ''}</span><span>${money(-items.reduce((s, t) => s + t.amount, 0), { sign: true })}</span></div><ul class="tx-list flat">${items.map((t) => txRow(t, false, { inCard: true }))}</ul></section>`,
+        )}
+      </details>`;
+    };
     return html`
       <header class="page-head"><h1>Extrato</h1>
         <div class="head-actions"><button type="button" class="btn sm" data-import="extrato">${icon('upload')} Importar arquivo</button><button type="button" class="btn sm" data-import="fatura">${icon('card')} Importar fatura</button></div>
@@ -68,6 +106,7 @@ export default {
           ${[['all', 'Todos'], ['expense', 'Gastos'], ['income', 'Ganhos']].map(([k, l]) => html`<label><input type="radio" name="ex-f" value="${k}" ${f === k ? 'checked' : ''}><span>${l}</span></label>`)}
         </div>
       </div>
+      ${[...invoices.values()].sort((a, b) => b.due.localeCompare(a.due) || a.last4.localeCompare(b.last4)).map(invoiceBlock)}
       ${txs.length
         ? [...days.entries()].map(([d, list]) => {
             const total = list.reduce((s, t) => s + (t.internal ? 0 : t.type === 'income' ? t.amount : -t.amount), 0);
